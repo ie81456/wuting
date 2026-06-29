@@ -586,7 +586,7 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
             else:
                 # 💡 核心優化：彈出精美直式日曆表，允許滑鼠或手機連續多選特定日期
                 st.markdown("**📅 請在下方日曆表中，點選所有欲上工的日期（可多選）：**")
-                # 預設顯示 2026-07-01 方便峰哥測試，未來使用者點開會自動聚焦到該日期
+                # 使用標準的多選日期陣列設定
                 selected_calendar_dates = st.date_input(
                     "點擊輸入框會彈出日曆表，點選完日期後，再次點擊輸入框可繼續加選其他日期：",
                     value=[datetime.date(2026, 7, 1)],
@@ -594,10 +594,19 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 )
                 
                 if st.button("⚡ 開始依【日曆選定日期】鋪設底稿（自動過濾排休）", type="primary"):
-                    if isinstance(selected_calendar_dates, list):
-                        target_dates = selected_calendar_dates
-                    elif isinstance(selected_calendar_dates, datetime.date):
+                    # 🚀 超強防呆解析：管它返回什麼格式，一網打盡轉成乾淨的日期清單
+                    if hasattr(selected_calendar_dates, '__iter__') and not isinstance(selected_calendar_dates, (str, bytes)):
+                        target_dates = list(selected_calendar_dates)
+                    elif selected_calendar_dates:
                         target_dates = [selected_calendar_dates]
+                    else:
+                        target_dates = []
+                        
+                    # 額外安全性防呆：如果使用者選了範圍導致有怪資料，過濾出真正的 date 物件
+                    target_dates = [d for d in target_dates if isinstance(d, datetime.date)]
+                    
+                    if not target_dates:
+                        st.error("❌ 偵測不到任何已選取的日期！請確認輸入框內有勾選的日期標籤。")
 
             # ⚙️ 統一的核心鋪設底稿引擎 (兩者共用後端)
             if target_dates:
