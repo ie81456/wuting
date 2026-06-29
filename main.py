@@ -105,7 +105,7 @@ def save_cloud_data(df, sheet_key, columns):
         data_to_save = [df_save.columns.values.tolist()] + df_save.values.tolist()
         try: worksheet.update(values=data_to_save, range_name="A1")
         except:
-            try: worksheet.update("A1", data_to_save)
+            try: worksheet.update(data_to_save)
             except: worksheet.update_values("A1", data_to_save)
         return True
     except Exception as e: 
@@ -190,7 +190,7 @@ if not st.session_state.logged_in:
                         st.session_state.current_user_name = login_name
                         st.rerun()
                     else: st.error("❌ 密碼錯誤！")
-            else: st.info("系統尚未建立任何員工資料，請管理者先登入建立。")
+            else: st.info("系統尚未建立 any 員工資料，請管理者先登入建立。")
 
         with tab_admin:
             st.subheader("管理者特權驗證")
@@ -236,7 +236,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     if 'data_loaded' in st.session_state: del st.session_state['data_loaded']
     st.rerun()
 
-st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V8.9")
+st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V9.0")
 
 # 通用函數
 def parse_single_shift_hours(t_in, t_out):
@@ -488,7 +488,7 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
             
     with col_view:
         st.subheader("📋 目前已登記的排休清單")
-        if not st.session_state.leave_requests_db.empty and st.session_state.leave_requests_db['日期'].tolist()[0] != "":
+        if not st.session_state.leave_requests_db.empty && st.session_state.leave_requests_db['日期'].tolist()[0] != "":
             df_display = st.session_state.leave_requests_db.sort_values(by='日期').copy()
             if not is_admin:
                 df_display = df_display[df_display['員工姓名'] == st.session_state.current_user_name]
@@ -586,7 +586,8 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             curr += datetime.timedelta(days=1)
 
             else:
-                # 💡 終極優化：永不縮回的方塊矩陣
+                # 💡 終極安全鎖優化：利用 st.form 表單把所有的 Checkbox 鎖起來！
+                # 這樣您在勾選複選方塊時，網頁「絕對不會」觸發背景重跑去連 Google，保證零圈圈！
                 target_year = st.selectbox("年份：", [2026, 2027], key="p_matrix_year")
                 target_month = st.selectbox("月份：", list(range(1, 13)), index=datetime.datetime.now().month - 1 if datetime.datetime.now().month <= 12 else 6, key="p_matrix_month")
                 
@@ -599,18 +600,27 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     
                 st.markdown(f"**📅 請直接點選下方方塊（可任意多選不連續日期，按鈕絕不縮回）：**")
                 
-                matrix_cols = st.columns(7)
-                for day_num in range(1, max_days + 1):
-                    col_idx = (day_num - 1) % 7
-                    with matrix_cols[col_idx]:
-                        is_selected = st.checkbox(f"{day_num}日", key=f"matrix_day_{day_num}")
-                        if is_selected:
+                # 🚀 建立安全表單區塊
+                with st.form("discontinuous_matrix_form"):
+                    matrix_cols = st.columns(7)
+                    form_selected_days = []
+                    for day_num in range(1, max_days + 1):
+                        col_idx = (day_num - 1) % 7
+                        with matrix_cols[col_idx]:
+                            is_selected = st.checkbox(f"{day_num}日", key=f"matrix_day_{day_num}")
+                            if is_selected:
+                                form_selected_days.append(day_num)
+                                
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    # 把鋪底稿按鈕做成 Form 的 Submit 按鈕
+                    submit_matrix = st.form_submit_button("⚡ 開始依【面板選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True)
+                    
+                    if submit_matrix:
+                        for day_num in form_selected_days:
                             target_dates.append(datetime.date(target_year, target_month, day_num))
-                            
-                target_dates.sort()
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.button("⚡ 開始依【面板選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True)
+                        target_dates.sort()
+                        if not target_dates:
+                            st.error("❌ 您尚未勾選任何日期方塊！請先在上方面板勾選要上工的日子。")
 
             # ⚙️ 統一的高速大批次鋪設底稿引擎 (兩者共用後端)
             if target_dates:
@@ -641,7 +651,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             df_schedule = pd.concat([df_schedule, new_sch_row], ignore_index=True)
                             added_count += 1
                 
-                # 🚀 核心極速優化：先更新本地暫存，再「只呼叫一次」雲端寫入，大幅減少請求時間與429錯誤
                 st.session_state.schedule_db = df_schedule
                 with st.spinner("⚡ 正在打包大批次班表並高速同步至雲端資料庫..."):
                     同步成功 = save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
