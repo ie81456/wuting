@@ -76,7 +76,7 @@ def init_gspread_system(*args, **kwargs):
         try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
         except Exception as e: st.error(f"本地憑證檔案解析失敗：{str(e)}")
         
-    st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
+    st.error("❌ 系統尚未配置 any 安全密鑰！一般員工請通知後台管理者。")
     st.stop()
 
 gc = init_gspread_system()
@@ -232,7 +232,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     if 'data_loaded' in st.session_state: del st.session_state['data_loaded']
     st.rerun()
 
-st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V8.7")
+st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V8.8")
 
 # 通用函數
 def parse_single_shift_hours(t_in, t_out):
@@ -497,7 +497,7 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
                 st.subheader("🔧 管理者手工修改控制台")
                 df_all = st.session_state.leave_requests_db.sort_values(by='日期').copy()
                 df_all['選單標籤'] = df_all['日期'].astype(str) + " | " + df_all['員工姓名'].astype(str) + " (" + df_all['請假時段'].astype(str) + ") - " + df_all['案場名稱'].astype(str)
-                target_leave_label = st.selectbox("請選擇您想調整或撤回的排休紀錄：", df_all['選單標籤'].tolist())
+                target_leave_label = st.selectbox("請選擇您想調整 or 撤回的排休紀錄：", df_all['選單標籤'].tolist())
                 match_row = df_all[df_all['選單標籤'] == target_leave_label].iloc[0]
                 o_date, o_worker, o_site, o_shift = match_row['日期'], match_row['員工姓名'], match_row['案場名稱'], match_row['請假時段']
                 db_ref = st.session_state.leave_requests_db
@@ -542,8 +542,8 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 template_worker = st.selectbox("2. 選擇固定上工的人員：", st.session_state.workers_db['姓名'].tolist(), key="t_worker")
             
             with col_t2:
-                # 💡 核心功能：讓管理者自由切換「星期勾選」或「日曆點選」
-                鋪底稿模式 = st.radio("3. 請選擇底稿鋪設依據：", ["按星期規律（整月快速鋪設）", "按特定日期（日曆多選點面）"], horizontal=True)
+                # 💡 核心功能：讓管理者自由切換「星期勾選」或「日曆自由挑選（不連續）」
+                鋪底稿模式 = st.radio("3. 請選擇底稿鋪設依據：", ["按星期規律（整月快速鋪設）", "按特定日期（日曆多選點選）"], horizontal=True)
 
             st.markdown("---")
             
@@ -584,29 +584,40 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             curr += datetime.timedelta(days=1)
 
             else:
-                # 💡 核心優化：彈出精美直式日曆表，允許滑鼠或手機連續多選特定日期
-                st.markdown("**📅 請在下方日曆表中，點選所有欲上工的日期（可多選）：**")
-                # 使用標準的多選日期陣列設定
-                selected_calendar_dates = st.date_input(
-                    "點擊輸入框會彈出日曆表，點選完日期後，再次點擊輸入框可繼續加選其他日期：",
-                    value=[datetime.date(2026, 7, 1)],
-                    key="calendar_multi_select"
-                )
+                # 💡 終極優化：真正的散班點選機制！不再連成一個不間斷區間
+                st.markdown("**📅 請在下方自由挑選所有欲上工的日期（可任意多選不連續日期）：**")
                 
-                if st.button("⚡ 開始依【日曆選定日期】鋪設底稿（自動過濾排休）", type="primary"):
-                    # 🚀 超強防呆解析：管它返回什麼格式，一網打盡轉成乾淨的日期清單
-                    if hasattr(selected_calendar_dates, '__iter__') and not isinstance(selected_calendar_dates, (str, bytes)):
-                        target_dates = list(selected_calendar_dates)
-                    elif selected_calendar_dates:
-                        target_dates = [selected_calendar_dates]
-                    else:
-                        target_dates = []
-                        
-                    # 額外安全性防呆：如果使用者選了範圍導致有怪資料，過濾出真正的 date 物件
-                    target_dates = [d for d in target_dates if isinstance(d, datetime.date)]
-                    
+                if "custom_discontinuous_dates" not in st.session_state:
+                    st.session_state.custom_discontinuous_dates = []
+                
+                col_cal, col_clear = st.columns([3, 1])
+                with col_cal:
+                    new_click_date = st.date_input("👉 請在日曆點選【單一日期】加入排班清單：", value=datetime.date(2026, 7, 1), key="cal_one_by_one")
+                with col_clear:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🗑️ 倒空已選日期", use_container_width=True):
+                        st.session_state.custom_discontinuous_dates = []
+                        st.rerun()
+                
+                # 打孔機入庫：只要選新日期就疊加進去，並排除重複
+                if new_click_date not in st.session_state.custom_discontinuous_dates:
+                    st.session_state.custom_discontinuous_dates.append(new_click_date)
+                
+                st.session_state.custom_discontinuous_dates.sort()
+                
+                # 視覺化呈現目前收集到的所有零散日期
+                st.markdown("**📌 目前已選定的上工日期著名名單：**")
+                if st.session_state.custom_discontinuous_dates:
+                    display_tags = [d.strftime('%Y-%m-%d') for d in st.session_state.custom_discontinuous_dates]
+                    st.info(" ｜ ".join(display_tags))
+                else:
+                    st.caption("（目前尚未選擇任何日期，請點選上方日曆）")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("⚡ 開始依【日曆選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True):
+                    target_dates = st.session_state.custom_discontinuous_dates
                     if not target_dates:
-                        st.error("❌ 偵測不到任何已選取的日期！請確認輸入框內有勾選的日期標籤。")
+                        st.error("❌ 偵測不到任何已選取的日期！請先在日曆上挑選日子。")
 
             # ⚙️ 統一的核心鋪設底稿引擎 (兩者共用後端)
             if target_dates:
@@ -641,8 +652,9 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             
                 st.session_state.schedule_db = df_schedule
                 save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
-                st.success(f"🎉 雲端底稿鋪设完畢！共成功寫入 {added_count} 筆班表數據。")
+                st.success(f"🎉 雲端底稿鋪設完畢！共成功寫入 {added_count} 筆班表數據。")
                 st.rerun()
+
         st.markdown("---")
         st.subheader("📋 模組二：現有總班表名冊與時段精準微調")
         col_m1, col_m2 = st.columns([1, 2])
@@ -686,7 +698,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
         with col_m2:
             st.markdown("📊 **雲端已發布總排班名冊**")
             if not st.session_state.schedule_db.empty and st.session_state.schedule_db['日期'].tolist()[0] != "":
-                # 💡 核心優化：優先以『案場名稱』做首層分組排序，次層再依據『日期』排序
                 df_sorted = st.session_state.schedule_db.sort_values(by=['案場名稱', '日期', '班段名稱']).copy()
                 st.dataframe(df_sorted, use_container_width=True)
                 if st.button("🚨 重置與清空雲端排班庫"):
@@ -712,7 +723,6 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
             days_count = end_date.day
         except: days_count = 31
         
-        
         week_mapping = {0: "一", 1: "二", 2: "三", 3: "四", 4: "五", 5: "六", 6: "日"}
         rows_list = []
         for d in range(1, days_count + 1):
@@ -731,7 +741,6 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
                 if not day_leave.empty: 
                     leave_text = "、".join([f"{r['員工姓名']} ({str(r['請假時段']).replace('整天全時段', '全天班').replace('全天時段', '全天班')}休)" for _, r in day_leave.iterrows()])
             
-            # 💡 核心優化：取消強制換行，且自動將時段名稱替換為「全天班」
             worker_shift_text = ""
             if not day_site_data.empty: 
                 worker_shift_text = " / ".join([f"{r['員工姓名']} ({str(r['班段名稱']).replace('全天時段', '全天班')})" for _, r in day_site_data.iterrows()])
@@ -760,7 +769,6 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
             try:
                 pdfmetrics.registerFont(TTFont('ChineseFont', FONT_FILE))
                 buffer = io.BytesIO()
-                # 縮小左右邊距，釋放更多水平印製空間給勤務人員
                 doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=20, leftMargin=20, topMargin=40, bottomMargin=40)
                 elements = []
                 styles = getSampleStyleSheet()
@@ -781,7 +789,6 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
                 data = [[Paragraph(f"<b>{c}</b>", header_style) for c in edited_df.columns]]
                 for row in edited_df.values.tolist(): data.append([Paragraph(str(cell).replace('\n', '<br/>'), cell_style) for cell in row])
                 
-                # 💡 核心優化：調寬重要欄位（勤務人員放大到 270pt），縮小日期與星期，徹底防範擠壓
                 t = Table(data, colWidths=[30, 110, 30, 270, 115], repeatRows=1)
                 t.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
                 elements.append(t)
