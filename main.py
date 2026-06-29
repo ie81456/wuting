@@ -48,14 +48,12 @@ def save_remarks(data):
 
 remarks_db = load_remarks()
 
-@st.cache_resource
 def init_cloud_font():
     """💡 本地字體安全鎖定：字體已直接由 GitHub 隨附上傳，不需聯網下載，保證 PDF 100% 出字"""
     if not os.path.exists(FONT_FILE):
         st.error(f"❌ 嚴重錯誤：GitHub 倉庫中找不到 {FONT_FILE} 字型檔！請確保已上傳該檔案。")
         st.stop()
 
-@st.cache_resource
 def init_gspread_system(*args, **kwargs):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     
