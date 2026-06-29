@@ -50,46 +50,36 @@ remarks_db = load_remarks()
 
 @st.cache_resource
 def init_cloud_font():
-"""💡 雲端智慧字體機制：若找不到字體，自動從網路高速下載，若下載失敗則降級處理，絕不死機"""
+    """💡 雲端智慧字體機制：若找不到字體，自動從網路高速下載輕量中文字體，徹底免去 GitHub 上傳限制"""
     if not os.path.exists(FONT_FILE):
-        # 改用 GitHub 官方開源且最穩定的 3 號備用中文字體下載點（Noto Sans TC 繁體中文）
-        urls = [
-            "https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
-            "https://github.com/googlefonts/noto-cjk/raw/main/Sans/Variable/NotoSansCJKtc-VF.ttf",
-            "https://raw.githubusercontent.com/steveruizok/noto-fonts/master/hinted/NotoSansTC/NotoSansTC-Regular.ttf"
-        ]
-        
-        success = False
-        for url in urls:
-            try:
-                # 設定超時限制，防止卡死
-                urllib.request.urlretrieve(url, FONT_FILE)
-                success = True
-                break
-            except:
-                continue
-                
-        if not success:
-            st.warning("⚠️ 雲端中文字體線上下載失敗，PDF 匯出功能暫時停用。請聯絡管理者檢查網路連線。")
+        try:
+            # 下載微軟正黑/思源級別的免費開源繁體中文字體
+            url = "https://github.com/steveruizok/noto-fonts/raw/master/hinted/NotoSansTC/NotoSansTC-Regular.ttf"
+            urllib.request.urlretrieve(url, FONT_FILE)
+        except Exception as e:
+            st.error(f"雲端中文字體下載失敗，PDF 可能無法正常顯示中文：{str(e)}")
 
 @st.cache_resource
 def init_gspread_client():
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     
-    # 確保字體下載就算出錯也不會卡死整個網頁
     try:
         init_cloud_font()
-    except:
-        pass
+    except: pass
     
-    # 優先安全檢查：如果 Secrets 為空，不要拋出嚴重異常，先顯示友善提示
-    try:
-        if "gcp_service_account" in st.secrets:
-            creds_dict = dict(st.secrets["gcp_service_account"])
+    # 💡 終極相容：優先讀取單行 JSON 壓縮格式，其次讀取 TOML，最後讀本地
+    if "gcp_service_account" in st.secrets:
+        try:
+            secrets_ref = st.secrets["gcp_service_account"]
+            if "json_creds" in secrets_ref:
+                # 這是最不容易出錯的單行 JSON 讀取法
+                creds_dict = json.loads(secrets_ref["json_creds"])
+            else:
+                creds_dict = dict(secrets_ref)
             return gspread.authorize(Credentials.from_service_account_info(creds_dict, scopes=scope))
-    except Exception as e:
-        st.error(f"❌ 雲端密鑰設定有誤，請至 Settings -> Secrets 檢查格式：{str(e)}")
-        st.stop()
+        except Exception as e:
+            st.error(f"❌ 雲端密鑰解析失敗，請檢查 Secrets 格式：{str(e)}")
+            st.stop()
             
     if os.path.exists(CREDS_FILE):
         try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
