@@ -79,7 +79,7 @@ def init_cloud_font():
                 continue
 
 @st.cache_resource
-def init_gspread_client(*args, **kwargs):
+def init_gspread_system(*args, **kwargs):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     
     # 智慧防火牆隔離
@@ -120,7 +120,7 @@ def init_gspread_client(*args, **kwargs):
         
     st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
     st.stop()
-gc = init_gspread_client()
+gc = init_gspread_system()
 
 def load_cloud_data(sheet_key, columns):
     if gc is None: return pd.DataFrame(columns=columns)
