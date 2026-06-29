@@ -584,40 +584,37 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             curr += datetime.timedelta(days=1)
 
             else:
-                # 💡 終極優化：真正的散班點選機制！不再連成一個不間斷區間
-                st.markdown("**📅 請在下方自由挑選所有欲上工的日期（可任意多選不連續日期）：**")
+                # 💡 終極優化：改成永不縮回的「整月日期方塊大矩陣」，點選極致直覺！
+                target_year = st.selectbox("年份：", [2026, 2027], key="p_matrix_year")
+                target_month = st.selectbox("月份：", list(range(1, 13)), index=datetime.datetime.now().month - 1 if datetime.datetime.now().month <= 12 else 6, key="p_matrix_month")
                 
-                if "custom_discontinuous_dates" not in st.session_state:
-                    st.session_state.custom_discontinuous_dates = []
+                # 算出該月總共有幾天
+                try:
+                    next_m = target_month + 1 if target_month < 12 else 1
+                    next_y = target_year if target_month < 12 else target_year + 1
+                    max_days = (datetime.date(next_y, next_m, 1) - datetime.timedelta(days=1)).day
+                except:
+                    max_days = 31
+                    
+                st.markdown(f"**📅 請直接點選下方方塊（可任意多選不連續日期，按鈕絕不縮回）：**")
                 
-                col_cal, col_clear = st.columns([3, 1])
-                with col_cal:
-                    new_click_date = st.date_input("👉 請在日曆點選【單一日期】加入排班清單：", value=datetime.date(2026, 7, 1), key="cal_one_by_one")
-                with col_clear:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🗑️ 倒空已選日期", use_container_width=True):
-                        st.session_state.custom_discontinuous_dates = []
-                        st.rerun()
-                
-                # 打孔機入庫：只要選新日期就疊加進去，並排除重複
-                if new_click_date not in st.session_state.custom_discontinuous_dates:
-                    st.session_state.custom_discontinuous_dates.append(new_click_date)
-                
-                st.session_state.custom_discontinuous_dates.sort()
-                
-                # 視覺化呈現目前收集到的所有零散日期
-                st.markdown("**📌 目前已選定的上工日期著名名單：**")
-                if st.session_state.custom_discontinuous_dates:
-                    display_tags = [d.strftime('%Y-%m-%d') for d in st.session_state.custom_discontinuous_dates]
-                    st.info(" ｜ ".join(display_tags))
-                else:
-                    st.caption("（目前尚未選擇任何日期，請點選上方日曆）")
+                # 利用 7 欄位排列成像週曆/月曆一樣的方塊矩陣
+                matrix_cols = st.columns(7)
+                for day_num in range(1, max_days + 1):
+                    col_idx = (day_num - 1) % 7
+                    with matrix_cols[col_idx]:
+                        # 幫每個日期做一個獨立的核取方塊
+                        is_selected = st.checkbox(f"{day_num}日", key=f"matrix_day_{day_num}")
+                        if is_selected:
+                            target_dates.append(datetime.date(target_year, target_month, day_num))
+                            
+                # 排序日期
+                target_dates.sort()
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("⚡ 開始依【日曆選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True):
-                    target_dates = st.session_state.custom_discontinuous_dates
+                if st.button("⚡ 開始依【面板選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True):
                     if not target_dates:
-                        st.error("❌ 偵測不到任何已選取的日期！請先在日曆上挑選日子。")
+                        st.error("❌ 您尚未勾選任何日期方塊！請先在上方面板勾選要上工的日子。")
 
             # ⚙️ 統一的核心鋪設底稿引擎 (兩者共用後端)
             if target_dates:
