@@ -488,7 +488,7 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
             
     with col_view:
         st.subheader("📋 目前已登記的排休清單")
-        if not st.session_state.leave_requests_db.empty && st.session_state.leave_requests_db['日期'].tolist()[0] != "":
+        if not st.session_state.leave_requests_db.empty and st.session_state.leave_requests_db['日期'].tolist()[0] != "":
             df_display = st.session_state.leave_requests_db.sort_values(by='日期').copy()
             if not is_admin:
                 df_display = df_display[df_display['員工姓名'] == st.session_state.current_user_name]
