@@ -95,7 +95,7 @@ def load_cloud_data(sheet_key, columns):
     except: return pd.DataFrame(columns=columns)
 
 def save_cloud_data(df, sheet_key, columns):
-    if gc is None: return
+    if gc is None: return False
     try:
         sh = gc.open_by_key(SHEET_IDS[sheet_key])
         worksheet = sh.get_worksheet(0)
@@ -106,7 +106,10 @@ def save_cloud_data(df, sheet_key, columns):
         except:
             try: worksheet.update("A1", data_to_save)
             except: worksheet.update_values("A1", data_to_save)
-    except Exception as e: st.error(f"☁️ 雲端同步失敗：{str(e)}")
+        return True  # 🚀 新增：代表真正成功寫入 Google 雲端！
+    except Exception as e: 
+        st.error(f"☁️ 雲端同步失敗：{str(e)}")
+        return False  # 🚀 新增：代表被 Google 擋住了
 
 def load_site_types():
     default_types = ["辦公大樓", "購物中心", "展覽館", "工廠園區", "其他"]
