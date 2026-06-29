@@ -69,9 +69,9 @@ def init_cloud_font():
 
 @st.cache_resource
 def init_gspread_client():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     
-    # 智慧防火牆隔離：就算字體載入遇到狀況，也完全不干涉 Google 連線
+    # 智慧防火牆隔離
     try:
         init_cloud_font()
     except:
@@ -88,6 +88,13 @@ def init_gspread_client():
         except Exception as e:
             st.error(f"❌ 雲端密鑰解析失敗，請檢查 Secrets 格式：{str(e)}")
             st.stop()
+            
+    if os.path.exists(CREDS_FILE):
+        try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
+        except Exception as e: st.error(f"本地憑證檔案解析失敗：{str(e)}")
+        
+    st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
+    st.stop()
             
     if os.path.exists(CREDS_FILE):
         try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
