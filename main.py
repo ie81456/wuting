@@ -156,6 +156,8 @@ if 'data_loaded' not in st.session_state:
 
 if 'w_clear_key' not in st.session_state: st.session_state.w_clear_key = 0
 if 's_clear_key' not in st.session_state: st.session_state.s_clear_key = 0
+# 💡 用於動態重置日曆方塊矩陣的密鑰
+if 'matrix_form_version' not in st.session_state: st.session_state.matrix_form_version = 0
 
 
 # ==========================================
@@ -236,7 +238,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     if 'data_loaded' in st.session_state: del st.session_state['data_loaded']
     st.rerun()
 
-st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V9.0")
+st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V9.1")
 
 # 通用函數
 def parse_single_shift_hours(t_in, t_out):
@@ -586,8 +588,7 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             curr += datetime.timedelta(days=1)
 
             else:
-                # 💡 終極安全鎖優化：利用 st.form 表單把所有的 Checkbox 鎖起來！
-                # 這樣您在勾選複選方塊時，網頁「絕對不會」觸發背景重跑去連 Google，保證零圈圈！
+                # 💡 智慧清空鎖定：將動態版本號加入 key 裡，只要點擊鋪設成功，版本號+1，所有方塊就會瞬間被清空歸零！
                 target_year = st.selectbox("年份：", [2026, 2027], key="p_matrix_year")
                 target_month = st.selectbox("月份：", list(range(1, 13)), index=datetime.datetime.now().month - 1 if datetime.datetime.now().month <= 12 else 6, key="p_matrix_month")
                 
@@ -600,19 +601,20 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     
                 st.markdown(f"**📅 請直接點選下方方塊（可任意多選不連續日期，按鈕絕不縮回）：**")
                 
-                # 🚀 建立安全表單區塊
-                with st.form("discontinuous_matrix_form"):
+                # 🚀 表單加上智慧版本控制 key
+                v = st.session_state.matrix_form_version
+                with st.form(f"discontinuous_matrix_form_v_{v}"):
                     matrix_cols = st.columns(7)
                     form_selected_days = []
                     for day_num in range(1, max_days + 1):
                         col_idx = (day_num - 1) % 7
                         with matrix_cols[col_idx]:
-                            is_selected = st.checkbox(f"{day_num}日", key=f"matrix_day_{day_num}")
+                            # 將動態版本帶入 key 裡，以便後台控制一秒重置
+                            is_selected = st.checkbox(f"{day_num}日", key=f"matrix_day_{day_num}_v_{v}")
                             if is_selected:
                                 form_selected_days.append(day_num)
                                 
                     st.markdown("<br>", unsafe_allow_html=True)
-                    # 把鋪底稿按鈕做成 Form 的 Submit 按鈕
                     submit_matrix = st.form_submit_button("⚡ 開始依【面板選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True)
                     
                     if submit_matrix:
@@ -656,7 +658,9 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     同步成功 = save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
                 
                 if 同步成功:
-                    st.success(f"🎉 雲端底稿鋪設完畢！共成功寫入 {added_count} 筆班表數據。")
+                    # 🚀 核心清空邏輯：只要成功寫入雲端，版本號立刻+1，徹底洗掉舊的勾勾紀錄！
+                    st.session_state.matrix_form_version += 1
+                    st.success(f"🎉 雲端底稿鋪設完畢！共成功寫入 {added_count} 筆班表數據，且已自動歸零清空選取面板！")
                     st.rerun()
                 else:
                     st.warning("⚠️ 由於 Google 流量管制，本次數據未能成功寫入雲端。請稍等 15 秒後再次點擊按鈕重試即可！")
@@ -806,7 +810,7 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
                     for line in s_rows.iloc[0]['注意事項'].split('\n'): elements.append(Paragraph(line, notes_style))
                 
                 doc.build(elements)
-                st.download_button(label="⬇️ 點擊下載正式 PDF 班表", data=buffer.getvalue(), file_name=f"{COMPANY_NAME}_{sel_site}_{sel_year}_{sel_month:02d}月班表.pdf", mime="application/pdf")
+                st.download_button(label="⬇️ 點擊下載正式 PDF 班表", data=buffer.getvalue(), file_name=f"{COMPANY_NAME}_{sel_site}_{sel_year}_{sel_month:02d}月_班表.pdf", mime="application/pdf")
                 st.success("✅ PDF 產生完畢！")
             except Exception as e: st.error(f"❌ PDF 產生失敗，請刷新重試：{str(e)}")
 
