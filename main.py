@@ -464,7 +464,7 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
                     
                     # 💡 智慧相容：如果對應的是「全天時段」，請假選項做優化調整
                     has_all_day_only = "全天時段" in s_shifts
-                    shift_leave_options = ["整天全時段"] if has_all_day_only else ["整天全時段"] + list(s_shifts.keys())
+                    shift_leave_options = ["全天班"] if has_all_day_only else ["整天全時段"] + list(s_shifts.keys())
                     
                     with st.form("leave_submit_form"):
                         select_date = st.date_input("3. 請選擇欲排休日期：", datetime.date(2026, 7, 1))
@@ -506,7 +506,7 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
                 s_shifts_mod = get_site_active_shifts(o_site)
                 
                 if "全天時段" in s_shifts_mod:
-                    mod_shift_options = ["整天全時段"]
+                    mod_shift_options = ["全天班"]
                 else:
                     mod_shift_options = ["整天全時段"] + list(s_shifts_mod.keys())
                     
@@ -671,12 +671,13 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
             leave_text = ""
             if not l_db.empty and l_db['日期'].tolist()[0] != "":
                 day_leave = l_db[(l_db['日期'] == d_str) & (l_db['案場名稱'] == sel_site)]
-                if not day_leave.empty: leave_text = "、".join([f"{r['員工姓名']}({r['請假時段']})" for _, r in day_leave.iterrows()])
+                if not day_leave.empty: 
+                       leave_text = "、".join([f"{r['員工姓名']} ({str(r['請假時段']).replace('整天全時段', '全天班').replace('全天時段', '全天班')}休)" for _, r in day_leave.iterrows()])
             
             # 💡 核心優化：取消勤務人員姓名的 \n 強制換行符號，改為一體化漂亮橫向顯示
             worker_shift_text = ""
-            if not day_site_data.empty: 
-                worker_shift_text = " / ".join([f"{r['員工姓名']} ({r['班段名稱']})" for _, r in day_site_data.iterrows()])
+           if not day_site_data.empty: 
+                  worker_shift_text = " / ".join([f"{r['員工姓名']} ({str(r['班段名稱']).replace('全天時段', '全天班')})" for _, r in day_site_data.iterrows()])
             
             date_key = f"{sel_site}_{sel_year}-{sel_month:02d}-{d:02d}"
             remark_text = remarks_db.get(date_key, "")
