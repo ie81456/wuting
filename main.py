@@ -56,33 +56,11 @@ def init_cloud_font():
         st.stop()
 
 @st.cache_resource
-def init_cloud_font():
-    """💡 智慧防卡死字體機制：改用極速多源下載，且限制最長連線時間只有 2 秒，超時自動放棄，絕不轉圈圈"""
-    if not os.path.exists(FONT_FILE):
-        # 準備多個最穩定的開源繁體中文字體下載點
-        urls = [
-            "https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
-            "https://raw.githubusercontent.com/steveruizok/noto-fonts/master/hinted/NotoSansTC/NotoSansTC-Regular.ttf"
-        ]
-        for url in urls:
-            try:
-                # ⭐️ 核心防呆：設定 timeout=2 秒，時間到沒反應直接跳過，不允許它卡住轉圈圈
-                with urllib.request.urlopen(url, timeout=2) as response, open(FONT_FILE, 'wb') as out_file:
-                    out_file.write(response.read())
-                if os.path.exists(FONT_FILE) and os.path.getsize(FONT_FILE) > 10000:
-                    break
-            except:
-                continue
-
-@st.cache_resource
 def init_gspread_system(*args, **kwargs):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     
-    # 智慧防火牆隔離
-    try:
-        init_cloud_font()
-    except:
-        pass
+    try: init_cloud_font()
+    except: pass
     
     if "gcp_service_account" in st.secrets:
         try:
@@ -102,20 +80,7 @@ def init_gspread_system(*args, **kwargs):
         
     st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
     st.stop()
-            
-    if os.path.exists(CREDS_FILE):
-        try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
-        except Exception as e: st.error(f"本地憑證檔案解析失敗：{str(e)}")
-        
-    st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
-    st.stop()
-            
-    if os.path.exists(CREDS_FILE):
-        try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
-        except Exception as e: st.error(f"本地憑證檔案解析失敗：{str(e)}")
-        
-    st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
-    st.stop()
+
 gc = init_gspread_system()
 
 def load_cloud_data(sheet_key, columns):
@@ -173,10 +138,6 @@ def save_site_types(types_list):
 # ==========================================
 # ⚡ Session State 智慧快取與登入狀態管理
 # ==========================================
-if gc is None:
-    st.error("❌ 系統找不到密鑰：請確保本地有 `google_creds.json` 或雲端 Secrets 已正確設定。")
-    st.stop()
-
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_role = None
@@ -273,7 +234,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     if 'data_loaded' in st.session_state: del st.session_state['data_loaded']
     st.rerun()
 
-st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V8.6")
+st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V8.7")
 
 # 通用函數
 def parse_single_shift_hours(t_in, t_out):
@@ -288,15 +249,23 @@ def parse_single_shift_hours(t_in, t_out):
     return 0.0
 
 def get_site_active_shifts(site_name):
+    """💡 智慧時段引擎：若案場僅設定一個時段，自動將時段名稱轉換為『全天時段』"""
     site_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'] == site_name]
     if site_rows.empty: return {}
     site_data = site_rows.iloc[0]
-    active_shifts = {}
+    
+    raw_shifts = {}
     for i in ["一", "二", "三"]:
-        t_up = site_data.get(f'時段{i}_上', "")
-        t_down = site_data.get(f'時段{i}_下', "")
-        if t_up and t_down: active_shifts[f"時段{i}"] = f"{t_up}-{t_down}"
-    return active_shifts
+        t_up = str(site_data.get(f'時段{i}_上', "")).strip()
+        t_down = str(site_data.get(f'時段{i}_下', "")).strip()
+        if t_up and t_down and t_up != "None" and t_down != "None":
+            raw_shifts[f"時段{i}"] = f"{t_up}-{t_down}"
+            
+    # 💡 核心優化：若只有單一時段被啟用，直接正名為「全天時段」
+    if len(raw_shifts) == 1 and "時段一" in raw_shifts:
+        return {"全天時段": raw_shifts["時段一"]}
+        
+    return raw_shifts
 
 # ==========================================
 # 各頁面邏輯區塊
@@ -371,7 +340,7 @@ elif page == "案場基本資料設定":
             site_type = st.selectbox("案場性質", st.session_state.site_types, key=f"s_type_{sk}")
             manager_name = st.text_input("案場聯絡人姓名", key=f"s_mn_{sk}")
             manager_phone = st.text_input("案場聯絡人電話", key=f"s_mp_{sk}")
-            st.markdown("⏱️ **自訂工作時間區段 (最多三段)**")
+            st.markdown("⏱️ **自訂工作時間區段 (最多三段，若一天只有一段，請僅填報時段一)**")
             c1, c2 = st.columns(2)
             s1_in = c1.text_input("時段一 上班 (例: 08:00)", key=f"s_s1i_{sk}")
             s1_out = c2.text_input("時段一 下班 (例: 12:00)", key=f"s_s1o_{sk}")
@@ -494,7 +463,11 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
                 if worker_allowed_sites and worker_allowed_sites[0] != "":
                     select_site = st.selectbox("2. 請選擇所屬案場：", worker_allowed_sites)
                     s_shifts = get_site_active_shifts(select_site)
-                    shift_leave_options = ["整天全時段"] + list(s_shifts.keys())
+                    
+                    # 💡 智慧相容：如果對應的是「全天時段」，請假選項做優化調整
+                    has_all_day_only = "全天時段" in s_shifts
+                    shift_leave_options = ["整天全時段"] if has_all_day_only else ["整天全時段"] + list(s_shifts.keys())
+                    
                     with st.form("leave_submit_form"):
                         select_date = st.date_input("3. 請選擇欲排休日期：", datetime.date(2026, 7, 1))
                         select_leave_shift = st.selectbox("4. 請選擇欲請假的精確時段：", shift_leave_options)
@@ -533,7 +506,12 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
                 idx = db_ref[(db_ref['日期'].astype(str) == str(o_date)) & (db_ref['員工姓名'].astype(str) == str(o_worker)) & (db_ref['案場名稱'].astype(str) == str(o_site)) & (db_ref['請假時段'].astype(str) == str(o_shift))].index[0]
                 mod_date = st.date_input("修改請假日期：", datetime.datetime.strptime(str(o_date), '%Y-%m-%d').date())
                 s_shifts_mod = get_site_active_shifts(o_site)
-                mod_shift_options = ["整天全時段"] + list(s_shifts_mod.keys())
+                
+                if "全天時段" in s_shifts_mod:
+                    mod_shift_options = ["整天全時段"]
+                else:
+                    mod_shift_options = ["整天全時段"] + list(s_shifts_mod.keys())
+                    
                 mod_shift = st.selectbox("修改請假時段：", mod_shift_options, index=mod_shift_options.index(o_shift) if o_shift in mod_shift_options else 0)
                 mod_type = st.radio("修改假別類型：", ["特休 (勞基法最高優先權)", "輪休 (一般排休)"], index=0 if "特休" in str(match_row['假別性質']) else 1)
                 btn_m1, btn_m2 = st.columns(2)
@@ -654,7 +632,8 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
         with col_m2:
             st.markdown("📊 **雲端已發布總排班名冊**")
             if not st.session_state.schedule_db.empty and st.session_state.schedule_db['日期'].tolist()[0] != "":
-                df_sorted = st.session_state.schedule_db.sort_values(by=['日期', '案場名稱', '班段名稱']).copy()
+                # 💡 核心優化：優先以『案場名稱』做首層分組排序，次層再依據『日期』排序
+                df_sorted = st.session_state.schedule_db.sort_values(by=['案場名稱', '日期', '班段名稱']).copy()
                 st.dataframe(df_sorted, use_container_width=True)
                 if st.button("🚨 重置與清空雲端排班庫"):
                     st.session_state.schedule_db = pd.DataFrame(columns=['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
@@ -696,8 +675,10 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
                 day_leave = l_db[(l_db['日期'] == d_str) & (l_db['案場名稱'] == sel_site)]
                 if not day_leave.empty: leave_text = "、".join([f"{r['員工姓名']}({r['請假時段']})" for _, r in day_leave.iterrows()])
             
+            # 💡 核心優化：取消勤務人員姓名的 \n 強制換行符號，改為一體化漂亮橫向顯示
             worker_shift_text = ""
-            if not day_site_data.empty: worker_shift_text = " / ".join([f"{r['員工姓名']}\n({r['班段名稱']})" for _, r in day_site_data.iterrows()])
+            if not day_site_data.empty: 
+                worker_shift_text = " / ".join([f"{r['員工姓名']} ({r['班段名稱']})" for _, r in day_site_data.iterrows()])
             
             date_key = f"{sel_site}_{sel_year}-{sel_month:02d}-{d:02d}"
             remark_text = remarks_db.get(date_key, "")
@@ -723,7 +704,8 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
             try:
                 pdfmetrics.registerFont(TTFont('ChineseFont', FONT_FILE))
                 buffer = io.BytesIO()
-                doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
+                # 縮小左右邊距，釋放更多水平印製空間給勤務人員
+                doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=20, leftMargin=20, topMargin=40, bottomMargin=40)
                 elements = []
                 styles = getSampleStyleSheet()
                 title_style = ParagraphStyle(name='TitleStyle', fontName='ChineseFont', fontSize=15, spaceAfter=20, leading=20)
@@ -731,19 +713,20 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
                 
                 if os.path.exists(LOGO_FILE):
                     im = RLImage(LOGO_FILE, width=120, height=50)
-                    header_table = Table([[im, Paragraph(title_text, title_style)]], colWidths=[130, 380])
+                    header_table = Table([[im, Paragraph(title_text, title_style)]], colWidths=[130, 400])
                     header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
                     elements.append(header_table)
                 else: elements.append(Paragraph(title_text, title_style))
                 
                 elements.append(Spacer(1, 10))
-                cell_style = ParagraphStyle(name='CellStyle', fontName='ChineseFont', fontSize=9, leading=12, alignment=1)
+                cell_style = ParagraphStyle(name='CellStyle', fontName='ChineseFont', fontSize=9, leading=13, alignment=1)
                 header_style = ParagraphStyle(name='HeaderStyle', fontName='ChineseFont', fontSize=10, alignment=1)
                 
                 data = [[Paragraph(f"<b>{c}</b>", header_style) for c in edited_df.columns]]
                 for row in edited_df.values.tolist(): data.append([Paragraph(str(cell).replace('\n', '<br/>'), cell_style) for cell in row])
                 
-                t = Table(data, colWidths=[35, 120, 35, 230, 115], repeatRows=1)
+                # 💡 核心優化：調寬重要欄位（勤務人員放大到 270pt），縮小日期與星期，徹底防範擠壓
+                t = Table(data, colWidths=[30, 110, 30, 270, 115], repeatRows=1)
                 t.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
                 elements.append(t)
                 elements.append(Spacer(1, 15))
@@ -792,7 +775,7 @@ else:
             
             s_db = st.session_state.schedule_db
             w_day_data = s_db[(s_db['日期'] == d_str) & (s_db['員工姓名'] == sel_worker_name)]
-            duty_text = " / ".join([f"{r['案場名稱']} {r['時段區間']}" for _, r in w_day_data.iterrows()]) if not w_day_data.empty else "（無排班）"
+            duty_text = " / ".join([f"{r['案場名稱']} ({r['時段區間']})" for _, r in w_day_data.iterrows()]) if not w_day_data.empty else "（無排班）"
             
             l_db = st.session_state.leave_requests_db
             my_leave_text = ""
@@ -824,7 +807,7 @@ else:
             try:
                 pdfmetrics.registerFont(TTFont('ChineseFont', FONT_FILE))
                 buffer = io.BytesIO()
-                doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
+                doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=20, leftMargin=20, topMargin=40, bottomMargin=40)
                 elements = []
                 styles = getSampleStyleSheet()
                 title_style = ParagraphStyle(name='TitleStyle', fontName='ChineseFont', fontSize=15, spaceAfter=20, leading=20)
@@ -832,19 +815,19 @@ else:
                 
                 if os.path.exists(LOGO_FILE):
                     im = RLImage(LOGO_FILE, width=120, height=50)
-                    header_table = Table([[im, Paragraph(title_text, title_style)]], colWidths=[130, 380])
+                    header_table = Table([[im, Paragraph(title_text, title_style)]], colWidths=[130, 400])
                     header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
                     elements.append(header_table)
                 else: elements.append(Paragraph(title_text, title_style))
                 
                 elements.append(Spacer(1, 10))
-                cell_style = ParagraphStyle(name='CellStyle', fontName='ChineseFont', fontSize=9, leading=12, alignment=1)
+                cell_style = ParagraphStyle(name='CellStyle', fontName='ChineseFont', fontSize=9, leading=13, alignment=1)
                 header_style = ParagraphStyle(name='HeaderStyle', fontName='ChineseFont', fontSize=10, alignment=1)
                 
                 data = [[Paragraph(f"<b>{c}</b>", header_style) for c in edited_p_df.columns]]
                 for row in edited_p_df.values.tolist(): data.append([Paragraph(str(cell).replace('\n', '<br/>'), cell_style) for cell in row])
                 
-                t = Table(data, colWidths=[35, 120, 35, 230, 115], repeatRows=1)
+                t = Table(data, colWidths=[30, 110, 30, 270, 115], repeatRows=1)
                 t.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
                 elements.append(t)
                 
