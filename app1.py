@@ -50,14 +50,10 @@ remarks_db = load_remarks()
 
 @st.cache_resource
 def init_cloud_font():
-    """💡 雲端智慧字體機制：若找不到字體，自動從網路高速下載輕量中文字體，徹底免去 GitHub 上傳限制"""
+    """💡 本地字體安全鎖定：字體已直接由 GitHub 隨附上傳，不需聯網下載，保證 PDF 100% 出字"""
     if not os.path.exists(FONT_FILE):
-        try:
-            # 下載微軟正黑/思源級別的免費開源繁體中文字體
-            url = "https://github.com/steveruizok/noto-fonts/raw/master/hinted/NotoSansTC/NotoSansTC-Regular.ttf"
-            urllib.request.urlretrieve(url, FONT_FILE)
-        except Exception as e:
-            st.error(f"雲端中文字體下載失敗，PDF 可能無法正常顯示中文：{str(e)}")
+        st.error(f"❌ 嚴重錯誤：GitHub 倉庫中找不到 {FONT_FILE} 字型檔！請確保已上傳該檔案。")
+        st.stop()
 
 @st.cache_resource
 def init_cloud_font():
