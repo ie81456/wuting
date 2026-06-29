@@ -536,57 +536,104 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
     else:
         st.subheader("🗓️ 模組一：快速鋪設整月週期底稿樣板")
         with st.expander("🛠️ 展開週期底稿引擎設定", expanded=True):
-            col_t1, col_t2, col_t3 = st.columns(3)
+            col_t1, col_t2 = st.columns([1, 1])
             with col_t1:
-                template_site = st.selectbox("1. 選擇要套用規規律的案場：", st.session_state.sites_db['案場名稱'].tolist(), key="t_site")
+                template_site = st.selectbox("1. 選擇要套用規律的案場：", st.session_state.sites_db['案場名稱'].tolist(), key="t_site")
                 template_worker = st.selectbox("2. 選擇固定上工的人員：", st.session_state.workers_db['姓名'].tolist(), key="t_worker")
+            
             with col_t2:
-                target_year = st.selectbox("3. 設定年份：", [2026, 2027])
-                target_month = st.selectbox("4. 設定月份：", list(range(1, 13)), index=6)
-            with col_t3:
-                st.markdown("**5. 勾選固定出勤的星期：**")
-                w_days = []
-                cw1, cw2, cw3 = st.columns(3)
-                if cw1.checkbox("週一"): w_days.append(0)
-                if cw2.checkbox("週二"): w_days.append(1)
-                if cw3.checkbox("週三"): w_days.append(2)
-                if cw1.checkbox("週四"): w_days.append(3)
-                if cw2.checkbox("週五"): w_days.append(4)
-                if cw3.checkbox("週六"): w_days.append(5)
-                if cw1.checkbox("週日"): w_days.append(6)
-            if st.button("⚡ 一鍵鋪設週期底稿（自動過濾雲端請假）", type="primary"):
-                if not w_days: st.error("❌ 請至少勾選一個出勤星期！")
-                else:
-                    start_date = datetime.date(target_year, target_month, 1)
-                    next_m = target_month + 1 if target_month < 12 else 1
-                    next_y = target_year if target_month < 12 else target_year + 1
-                    end_date = datetime.date(next_y, next_m, 1) - datetime.timedelta(days=1)
-                    current_date = start_date
-                    added_count = 0
-                    active_shifts = get_site_active_shifts(template_site)
-                    df_schedule = st.session_state.schedule_db.copy()
-                    while current_date <= end_date:
-                        if current_date.weekday() in w_days:
-                            d_str = current_date.strftime('%Y-%m-%d')
-                            for s_name, s_range in active_shifts.items():
-                                is_shift_on_leave = False
-                                if not st.session_state.leave_requests_db.empty and st.session_state.leave_requests_db['日期'].tolist()[0] != "":
-                                    l_db = st.session_state.leave_requests_db
-                                    match_leave = l_db[(l_db['日期'].astype(str) == d_str) & (l_db['員工姓名'].astype(str) == template_worker) & ((l_db['請假時段'] == "整天全時段") | (l_db['請假時段'] == s_name))]
-                                    if not match_leave.empty: is_shift_on_leave = True
-                                if not is_shift_on_leave:
-                                    t_up, t_down = s_range.split('-')
-                                    s_hours = parse_single_shift_hours(t_up, t_down)
-                                    if not df_schedule.empty:
-                                        df_schedule = df_schedule[~((df_schedule['日期'].astype(str) == d_str) & (df_schedule['案場名稱'].astype(str) == template_site) & (df_schedule['班段名稱'].astype(str) == s_name))]
-                                    new_sch_row = pd.DataFrame([{'日期': d_str, '案場名稱': template_site, '員工姓名': template_worker, '班段名稱': s_name, '時段區間': s_range, '時源工時': str(s_hours)}])
-                                    df_schedule = pd.concat([df_schedule, new_sch_row], ignore_index=True)
-                                    added_count += 1
-                        current_date += datetime.timedelta(days=1)
-                    st.session_state.schedule_db = df_schedule
-                    save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
-                    st.success(f"🎉 雲端週期底稿鋪設完畢！共寫入 {added_count} 筆。")
-                    st.rerun()
+                # 💡 核心功能：讓管理者自由切換「星期勾選」或「日曆點選」
+                鋪底稿模式 = st.radio("3. 請選擇底稿鋪設依據：", ["按星期規律（整月快速鋪設）", "按特定日期（日曆多選點面）"], horizontal=True)
+
+            st.markdown("---")
+            
+            # 定義排班日期容器
+            target_dates = []
+
+            if 鋪底稿模式 == "按星期規律（整月快速鋪設）":
+                col_w1, col_w2 = st.columns([1, 2])
+                with col_w1:
+                    target_year = st.selectbox("年份：", [2026, 2027], key="p_year")
+                    target_month = st.selectbox("月份：", list(range(1, 13)), index=datetime.datetime.now().month - 1 if datetime.datetime.now().month <= 12 else 6, key="p_month")
+                with col_w2:
+                    st.markdown("**勾選固定出勤的星期：**")
+                    w_days = []
+                    cw1, cw2, cw3, cw4 = st.columns(4)
+                    if cw1.checkbox("週一"): w_days.append(0)
+                    if cw2.checkbox("週二"): w_days.append(1)
+                    if cw3.checkbox("週三"): w_days.append(2)
+                    if cw4.checkbox("週四"): w_days.append(3)
+                    if cw1.checkbox("週五"): w_days.append(4)
+                    if cw2.checkbox("週六"): w_days.append(5)
+                    if cw3.checkbox("週日"): w_days.append(6)
+                
+                # 根據星期規律算出該月所有符合的日期
+                if st.button("⚡ 開始依【星期】鋪設底稿（自動過濾排休）", type="primary"):
+                    if not w_days:
+                        st.error("❌ 請至少勾選一個出勤星期！")
+                    else:
+                        start_date = datetime.date(target_year, target_month, 1)
+                        next_m = target_month + 1 if target_month < 12 else 1
+                        next_y = target_year if target_month < 12 else target_year + 1
+                        end_date = datetime.date(next_y, next_m, 1) - datetime.timedelta(days=1)
+                        
+                        curr = start_date
+                        while curr <= end_date:
+                            if curr.weekday() in w_days:
+                                target_dates.append(curr)
+                            curr += datetime.timedelta(days=1)
+
+            else:
+                # 💡 核心優化：彈出精美直式日曆表，允許滑鼠或手機連續多選特定日期
+                st.markdown("**📅 請在下方日曆表中，點選所有欲上工的日期（可多選）：**")
+                # 預設顯示 2026-07-01 方便峰哥測試，未來使用者點開會自動聚焦到該日期
+                selected_calendar_dates = st.date_input(
+                    "點擊輸入框會彈出日曆表，點選完日期後，再次點擊輸入框可繼續加選其他日期：",
+                    value=[datetime.date(2026, 7, 1)],
+                    key="calendar_multi_select"
+                )
+                
+                if st.button("⚡ 開始依【日曆選定日期】鋪設底稿（自動過濾排休）", type="primary"):
+                    if isinstance(selected_calendar_dates, list):
+                        target_dates = selected_calendar_dates
+                    elif isinstance(selected_calendar_dates, datetime.date):
+                        target_dates = [selected_calendar_dates]
+
+            # ⚙️ 統一的核心鋪設底稿引擎 (兩者共用後端)
+            if target_dates:
+                added_count = 0
+                active_shifts = get_site_active_shifts(template_site)
+                df_schedule = st.session_state.schedule_db.copy()
+                
+                for current_date in target_dates:
+                    d_str = current_date.strftime('%Y-%m-%d')
+                    for s_name, s_range in active_shifts.items():
+                        is_shift_on_leave = False
+                        
+                        # 安全檢查是否有排休
+                        if not st.session_state.leave_requests_db.empty and st.session_state.leave_requests_db['日期'].tolist()[0] != "":
+                            l_db = st.session_state.leave_requests_db
+                            match_leave = l_db[(l_db['日期'].astype(str) == d_str) & 
+                                               (l_db['員工姓名'].astype(str) == template_worker) & 
+                                               ((l_db['請假時段'] == "整天全時段") | (l_db['請假時段'] == "全天班") | (l_db['請假時段'] == s_name))]
+                            if not match_leave.empty: 
+                                is_shift_on_leave = True
+                        
+                        # 若沒請假，則自動鋪底稿
+                        if not is_shift_on_leave:
+                            t_up, t_down = s_range.split('-')
+                            s_hours = parse_single_shift_hours(t_up, t_down)
+                            if not df_schedule.empty:
+                                df_schedule = df_schedule[~((df_schedule['日期'].astype(str) == d_str) & (df_schedule['案場名稱'].astype(str) == template_site) & (df_schedule['班段名稱'].astype(str) == s_name))]
+                            
+                            new_sch_row = pd.DataFrame([{'日期': d_str, '案場名稱': template_site, '員工姓名': template_worker, '班段名稱': s_name, '時段區間': s_range, '時源工時': str(s_hours)}])
+                            df_schedule = pd.concat([df_schedule, new_sch_row], ignore_index=True)
+                            added_count += 1
+                            
+                st.session_state.schedule_db = df_schedule
+                save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
+                st.success(f"🎉 雲端底稿鋪设完畢！共成功寫入 {added_count} 筆班表數據。")
+                st.rerun()
         st.markdown("---")
         st.subheader("📋 模組二：現有總班表名冊與時段精準微調")
         col_m1, col_m2 = st.columns([1, 2])
