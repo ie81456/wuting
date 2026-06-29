@@ -95,6 +95,7 @@ def load_cloud_data(sheet_key, columns):
     except: return pd.DataFrame(columns=columns)
 
 def save_cloud_data(df, sheet_key, columns):
+    """💡 安全連線鎖：回傳成功或失敗布林值，防止被 Google API 擋住時寫入錯誤"""
     if gc is None: return False
     try:
         sh = gc.open_by_key(SHEET_IDS[sheet_key])
@@ -106,10 +107,10 @@ def save_cloud_data(df, sheet_key, columns):
         except:
             try: worksheet.update("A1", data_to_save)
             except: worksheet.update_values("A1", data_to_save)
-        return True  # 🚀 新增：代表真正成功寫入 Google 雲端！
+        return True
     except Exception as e: 
         st.error(f"☁️ 雲端同步失敗：{str(e)}")
-        return False  # 🚀 新增：代表被 Google 擋住了
+        return False
 
 def load_site_types():
     default_types = ["辦公大樓", "購物中心", "展覽館", "工廠園區", "其他"]
@@ -235,7 +236,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     if 'data_loaded' in st.session_state: del st.session_state['data_loaded']
     st.rerun()
 
-st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V8.8")
+st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V8.9")
 
 # 通用函數
 def parse_single_shift_hours(t_in, t_out):
@@ -545,7 +546,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 template_worker = st.selectbox("2. 選擇固定上工的人員：", st.session_state.workers_db['姓名'].tolist(), key="t_worker")
             
             with col_t2:
-                # 💡 核心功能：讓管理者自由切換「星期勾選」或「日曆自由挑選（不連續）」
                 鋪底稿模式 = st.radio("3. 請選擇底稿鋪設依據：", ["按星期規律（整月快速鋪設）", "按特定日期（日曆多選點選）"], horizontal=True)
 
             st.markdown("---")
@@ -570,7 +570,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     if cw2.checkbox("週六"): w_days.append(5)
                     if cw3.checkbox("週日"): w_days.append(6)
                 
-                # 根據星期規律算出該月所有符合的日期
                 if st.button("⚡ 開始依【星期】鋪設底稿（自動過濾排休）", type="primary"):
                     if not w_days:
                         st.error("❌ 請至少勾選一個出勤星期！")
@@ -587,11 +586,10 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             curr += datetime.timedelta(days=1)
 
             else:
-                # 💡 終極優化：改成永不縮回的「整月日期方塊大矩陣」，點選極致直覺！
+                # 💡 終極優化：永不縮回的方塊矩陣
                 target_year = st.selectbox("年份：", [2026, 2027], key="p_matrix_year")
                 target_month = st.selectbox("月份：", list(range(1, 13)), index=datetime.datetime.now().month - 1 if datetime.datetime.now().month <= 12 else 6, key="p_matrix_month")
                 
-                # 算出該月總共有幾天
                 try:
                     next_m = target_month + 1 if target_month < 12 else 1
                     next_y = target_year if target_month < 12 else target_year + 1
@@ -601,25 +599,20 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     
                 st.markdown(f"**📅 請直接點選下方方塊（可任意多選不連續日期，按鈕絕不縮回）：**")
                 
-                # 利用 7 欄位排列成像週曆/月曆一樣的方塊矩陣
                 matrix_cols = st.columns(7)
                 for day_num in range(1, max_days + 1):
                     col_idx = (day_num - 1) % 7
                     with matrix_cols[col_idx]:
-                        # 幫每個日期做一個獨立的核取方塊
                         is_selected = st.checkbox(f"{day_num}日", key=f"matrix_day_{day_num}")
                         if is_selected:
                             target_dates.append(datetime.date(target_year, target_month, day_num))
                             
-                # 排序日期
                 target_dates.sort()
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("⚡ 開始依【面板選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True):
-                    if not target_dates:
-                        st.error("❌ 您尚未勾選任何日期方塊！請先在上方面板勾選要上工的日子。")
+                st.button("⚡ 開始依【面板選定日期】鋪設底稿（自動過濾排休）", type="primary", use_container_width=True)
 
-            # ⚙️ 統一的核心鋪設底稿引擎 (兩者共用後端)
+            # ⚙️ 統一的高速大批次鋪設底稿引擎 (兩者共用後端)
             if target_dates:
                 added_count = 0
                 active_shifts = get_site_active_shifts(template_site)
@@ -630,7 +623,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     for s_name, s_range in active_shifts.items():
                         is_shift_on_leave = False
                         
-                        # 安全檢查是否有排休
                         if not st.session_state.leave_requests_db.empty and st.session_state.leave_requests_db['日期'].tolist()[0] != "":
                             l_db = st.session_state.leave_requests_db
                             match_leave = l_db[(l_db['日期'].astype(str) == d_str) & 
@@ -639,7 +631,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             if not match_leave.empty: 
                                 is_shift_on_leave = True
                         
-                        # 若沒請假，則自動鋪底稿
                         if not is_shift_on_leave:
                             t_up, t_down = s_range.split('-')
                             s_hours = parse_single_shift_hours(t_up, t_down)
@@ -649,11 +640,17 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             new_sch_row = pd.DataFrame([{'日期': d_str, '案場名稱': template_site, '員工姓名': template_worker, '班段名稱': s_name, '時段區間': s_range, '時源工時': str(s_hours)}])
                             df_schedule = pd.concat([df_schedule, new_sch_row], ignore_index=True)
                             added_count += 1
-                            
+                
+                # 🚀 核心極速優化：先更新本地暫存，再「只呼叫一次」雲端寫入，大幅減少請求時間與429錯誤
                 st.session_state.schedule_db = df_schedule
-                save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
-                st.success(f"🎉 雲端底稿鋪設完畢！共成功寫入 {added_count} 筆班表數據。")
-                st.rerun()
+                with st.spinner("⚡ 正在打包大批次班表並高速同步至雲端資料庫..."):
+                    同步成功 = save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
+                
+                if 同步成功:
+                    st.success(f"🎉 雲端底稿鋪設完畢！共成功寫入 {added_count} 筆班表數據。")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ 由於 Google 流量管制，本次數據未能成功寫入雲端。請稍等 15 秒後再次點擊按鈕重試即可！")
 
         st.markdown("---")
         st.subheader("📋 模組二：現有總班表名冊與時段精準微調")
