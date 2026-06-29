@@ -156,7 +156,6 @@ if 'data_loaded' not in st.session_state:
 
 if 'w_clear_key' not in st.session_state: st.session_state.w_clear_key = 0
 if 's_clear_key' not in st.session_state: st.session_state.s_clear_key = 0
-# 💡 用於動態重置日曆方塊矩陣的密鑰
 if 'matrix_form_version' not in st.session_state: st.session_state.matrix_form_version = 0
 
 
@@ -238,7 +237,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     if 'data_loaded' in st.session_state: del st.session_state['data_loaded']
     st.rerun()
 
-st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V9.1")
+st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V9.2")
 
 # 通用函數
 def parse_single_shift_hours(t_in, t_out):
@@ -270,6 +269,12 @@ def get_site_active_shifts(site_name):
         return {"全天時段": raw_shifts["時段一"]}
         
     return raw_shifts
+
+# 🚀 貼心功能：計算「下個月」的預設月份資訊
+today = datetime.date.today()
+first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+default_next_year = first_day_of_next_month.year
+default_next_month = first_day_of_next_month.month
 
 # ==========================================
 # 各頁面邏輯區塊
@@ -468,12 +473,12 @@ elif "線上登記請假排休" in page or "填報排休與手工修改" in page
                     select_site = st.selectbox("2. 請選擇所屬案場：", worker_allowed_sites)
                     s_shifts = get_site_active_shifts(select_site)
                     
-                    # 💡 智慧相容：如果對應的是「全天時段」，請假選項做優化調整
                     has_all_day_only = "全天時段" in s_shifts
                     shift_leave_options = ["全天班"] if has_all_day_only else ["整天全時段"] + list(s_shifts.keys())
                     
                     with st.form("leave_submit_form"):
-                        select_date = st.date_input("3. 請選擇欲排休日期：", datetime.date(2026, 7, 1))
+                        # 🚀 預設請假日期鎖定在下個月 1 號，方便同仁填報
+                        select_date = st.date_input("3. 請選擇欲排休日期：", datetime.date(default_next_year, default_next_month, 1))
                         select_leave_shift = st.selectbox("4. 請選擇欲請假的精確時段：", shift_leave_options)
                         select_type = st.radio("5. 請選擇假別性質：", ["特休 (勞基法最高優先權)", "輪休 (一般排休)"])
                         submit_leave = st.form_submit_button("確認送出填報並同步雲端")
@@ -552,14 +557,14 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
 
             st.markdown("---")
             
-            # 定義排班日期容器
             target_dates = []
 
             if 鋪底稿模式 == "按星期規律（整月快速鋪設）":
                 col_w1, col_w2 = st.columns([1, 2])
                 with col_w1:
-                    target_year = st.selectbox("年份：", [2026, 2027], key="p_year")
-                    target_month = st.selectbox("月份：", list(range(1, 13)), index=datetime.datetime.now().month - 1 if datetime.datetime.now().month <= 12 else 6, key="p_month")
+                    # 🚀 貼心功能：年份與月份選單預設直接切換到「下個月」
+                    target_year = st.selectbox("年份：", [2026, 2027], index=[2026, 2027].index(default_next_year) if default_next_year in [2026, 2027] else 0, key="p_year")
+                    target_month = st.selectbox("月份：", list(range(1, 13)), index=default_next_month - 1, key="p_month")
                 with col_w2:
                     st.markdown("**勾選固定出勤的星期：**")
                     w_days = []
@@ -588,9 +593,9 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             curr += datetime.timedelta(days=1)
 
             else:
-                # 💡 智慧清空鎖定：將動態版本號加入 key 裡，只要點擊鋪設成功，版本號+1，所有方塊就會瞬間被清空歸零！
-                target_year = st.selectbox("年份：", [2026, 2027], key="p_matrix_year")
-                target_month = st.selectbox("月份：", list(range(1, 13)), index=datetime.datetime.now().month - 1 if datetime.datetime.now().month <= 12 else 6, key="p_matrix_month")
+                # 🚀 貼心功能：日曆方塊大矩陣選單預設也是直接切換到「下個月」
+                target_year = st.selectbox("年份：", [2026, 2027], index=[2026, 2027].index(default_next_year) if default_next_year in [2026, 2027] else 0, key="p_matrix_year")
+                target_month = st.selectbox("月份：", list(range(1, 13)), index=default_next_month - 1, key="p_matrix_month")
                 
                 try:
                     next_m = target_month + 1 if target_month < 12 else 1
@@ -601,7 +606,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     
                 st.markdown(f"**📅 請直接點選下方方塊（可任意多選不連續日期，按鈕絕不縮回）：**")
                 
-                # 🚀 表單加上智慧版本控制 key
                 v = st.session_state.matrix_form_version
                 with st.form(f"discontinuous_matrix_form_v_{v}"):
                     matrix_cols = st.columns(7)
@@ -609,7 +613,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     for day_num in range(1, max_days + 1):
                         col_idx = (day_num - 1) % 7
                         with matrix_cols[col_idx]:
-                            # 將動態版本帶入 key 裡，以便後台控制一秒重置
                             is_selected = st.checkbox(f"{day_num}日", key=f"matrix_day_{day_num}_v_{v}")
                             if is_selected:
                                 form_selected_days.append(day_num)
@@ -646,8 +649,15 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                         if not is_shift_on_leave:
                             t_up, t_down = s_range.split('-')
                             s_hours = parse_single_shift_hours(t_up, t_down)
+                            
+                            # 🚀 核心大修正：同一天同一個時段支援多人生效模式！
+                            # 只有在【完全同日期、同案場、同班段、且同名字】的情況下才進行清空覆蓋（避免同一個人點兩次）；
+                            # 如果名字不相同，則直接保留舊資料，並在後續 concat 加入新人員，達成多人上班並存！
                             if not df_schedule.empty:
-                                df_schedule = df_schedule[~((df_schedule['日期'].astype(str) == d_str) & (df_schedule['案場名稱'].astype(str) == template_site) & (df_schedule['班段名稱'].astype(str) == s_name))]
+                                df_schedule = df_schedule[~((df_schedule['日期'].astype(str) == d_str) & 
+                                                            (df_schedule['案場名稱'].astype(str) == template_site) & 
+                                                            (df_schedule['班段名稱'].astype(str) == s_name) & 
+                                                            (df_schedule['員工姓名'].astype(str) == template_worker))]
                             
                             new_sch_row = pd.DataFrame([{'日期': d_str, '案場名稱': template_site, '員工姓名': template_worker, '班段名稱': s_name, '時段區間': s_range, '時源工時': str(s_hours)}])
                             df_schedule = pd.concat([df_schedule, new_sch_row], ignore_index=True)
@@ -658,7 +668,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                     同步成功 = save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
                 
                 if 同步成功:
-                    # 🚀 核心清空邏輯：只要成功寫入雲端，版本號立刻+1，徹底洗掉舊的勾勾紀錄！
                     st.session_state.matrix_form_version += 1
                     st.success(f"🎉 雲端底稿鋪設完畢！共成功寫入 {added_count} 筆班表數據，且已自動歸零清空選取面板！")
                     st.rerun()
@@ -670,7 +679,8 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
         col_m1, col_m2 = st.columns([1, 2])
         with col_m1:
             st.markdown("🔧 **時段特定人員微調與抽換**")
-            m_date = st.date_input("1. 調整日期：", datetime.date(2026, 7, 1))
+            # 🚀 貼心功能：手工修改預設日期也拉到下個月 1 號
+            m_date = st.date_input("1. 調整日期：", datetime.date(default_next_year, default_next_month, 1))
             m_site = st.selectbox("2. 調整案場：", st.session_state.sites_db['案場名稱'].tolist())
             site_shifts = get_site_active_shifts(m_site)
             if site_shifts:
@@ -684,8 +694,7 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 if st.button("💾 確認儲存此時段調整變更並同步雲端", use_container_width=True):
                     d_str = m_date.strftime('%Y-%m-%d')
                     df_schedule_run = st.session_state.schedule_db.copy()
-                    if not df_schedule_run.empty:
-                        df_schedule_run = df_schedule_run[~((df_schedule_run['日期'].astype(str) == d_str) & (df_schedule_run['案場名稱'].astype(str) == m_site) & (df_schedule_run['班段名稱'].astype(str) == target_shift_name))]
+                    
                     if m_worker != "🗑️ 設為無人上班":
                         is_on_leave = False
                         if not st.session_state.leave_requests_db.empty and st.session_state.leave_requests_db['日期'].tolist()[0] != "":
@@ -693,6 +702,9 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             is_on_leave = not l_db[(l_db['日期'].astype(str) == d_str) & (l_db['員工姓名'].astype(str) == m_worker) & ((l_db['請假時段'] == "整天全時段") | (l_db['請假時段'] == target_shift_name))].empty
                         if is_on_leave: st.error(f"❌ 錯誤：【{m_worker}】當天該時段已登記排休，不可重複指派！")
                         else:
+                            # 🚀 微調同樣支援雙人模式：只有完全相同的人在同一個時段，才覆蓋舊紀錄
+                            if not df_schedule_run.empty:
+                                df_schedule_run = df_schedule_run[~((df_schedule_run['日期'].astype(str) == d_str) & (df_schedule_run['案場名稱'].astype(str) == m_site) & (df_schedule_run['班段名稱'].astype(str) == target_shift_name) & (df_schedule_run['員工姓名'].astype(str) == m_worker))]
                             new_row = pd.DataFrame([{'日期': d_str, '案場名稱': m_site, '員工姓名': m_worker, '班段名稱': target_shift_name, '時段區間': target_time_range, '時源工時': str(target_hours)}])
                             df_schedule_run = pd.concat([df_schedule_run, new_row], ignore_index=True)
                             st.session_state.schedule_db = df_schedule_run
@@ -700,11 +712,14 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             st.success(f"✅ 【{m_worker}】該時段微調更新完畢！")
                             st.rerun()
                     else:
+                        # 🗑️ 如果選「設為無人上班」，代表這天這個時段要清空（所有人全部撤走）
+                        if not df_schedule_run.empty:
+                            df_schedule_run = df_schedule_run[~((df_schedule_run['日期'].astype(str) == d_str) & (df_schedule_run['案場名稱'].astype(str) == m_site) & (df_schedule_run['班段名稱'].astype(str) == target_shift_name))]
                         st.session_state.schedule_db = df_schedule_run
                         save_cloud_data(df_schedule_run, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時'])
                         st.success(f"🗑️ 已成功撤除該時段值班人員。")
                         st.rerun()
-            else: st.warning(f"⚠️ 提示：該案場目前未設定任何工作時間區段。")
+            else: st.warning(f"⚠️ 提示：該案場目前未設定 any 工作時間區段。")
         with col_m2:
             st.markdown("📊 **雲端已發布總排班名冊**")
             if not st.session_state.schedule_db.empty and st.session_state.schedule_db['日期'].tolist()[0] != "":
@@ -718,11 +733,12 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
 elif page == "📊 班表大印製中心：正式 PDF 產出":
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
     if st.session_state.schedule_db.empty or st.session_state.schedule_db['日期'].tolist()[0] == "":
-        st.warning("⚠️ 目前雲端資料庫內尚無任何發布班表。")
+        st.warning("⚠️ 目前雲端資料庫內尚無 any 發布班表。")
     else:
         c_p1, c_p2, c_p3 = st.columns(3)
-        with c_p1: sel_year = st.selectbox("設定年份：", [2026, 2027], index=0)
-        with c_p2: sel_month = st.selectbox("設定月份：", list(range(1, 13)), index=6)
+        with c_p1: sel_year = st.selectbox("設定年份：", [2026, 2027], index=[2026, 2027].index(default_next_year) if default_next_year in [2026, 2027] else 0)
+        # 🚀 貼心功能：印製中心預設選中的也是下個月
+        with c_p2: sel_month = st.selectbox("設定月份：", list(range(1, 13)), index=default_next_month - 1)
         with c_p3: sel_site = st.selectbox("設定目標案場：", st.session_state.sites_db['案場名稱'].tolist())
         
         try:
@@ -751,9 +767,16 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
                 if not day_leave.empty: 
                     leave_text = "、".join([f"{r['員工姓名']} ({str(r['請假時段']).replace('整天全時段', '全天班').replace('全天時段', '全天班')}休)" for _, r in day_leave.iterrows()])
             
+            # 🚀 核心美化大優化：當同一個班段（例如：全天時段）有多人上班時，會聰明合併用斜線排開！
+            # 產出範例： 謝憲文 / 沈展毅 (全天班)
             worker_shift_text = ""
-            if not day_site_data.empty: 
-                worker_shift_text = " / ".join([f"{r['員工姓名']} ({str(r['班段名稱']).replace('全天時段', '全天班')})" for _, r in day_site_data.iterrows()])
+            if not day_site_data.empty:
+                grouped_shifts = []
+                for b_name, group in day_site_data.groupby('班段名稱'):
+                    names_combined = " / ".join(group['員工姓名'].tolist())
+                    nice_b_name = str(b_name).replace('全天時段', '全天班')
+                    grouped_shifts.append(f"{names_combined} ({nice_b_name})")
+                worker_shift_text = " ｜ ".join(grouped_shifts)
             
             date_key = f"{sel_site}_{sel_year}-{sel_month:02d}-{d:02d}"
             remark_text = remarks_db.get(date_key, "")
@@ -828,8 +851,8 @@ else:
                 st.info(f"🔒 隱私鎖定：您的專屬班表")
                 sel_worker_name = st.session_state.current_user_name
 
-        with c_emp2: sel_year = st.selectbox("查詢年份：", [2026, 2027], index=0)
-        with c_emp3: sel_month = st.selectbox("查詢月份：", list(range(1, 13)), index=6)
+        with c_emp2: sel_year = st.selectbox("查詢年份：", [2026, 2027], index=[2026, 2027].index(default_next_year) if default_next_year in [2026, 2027] else 0)
+        with c_emp3: sel_month = st.selectbox("查詢月份：", list(range(1, 13)), index=default_next_month - 1)
             
         try:
             start_date = datetime.date(sel_year, sel_month, 1)
