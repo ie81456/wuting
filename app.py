@@ -50,6 +50,17 @@ remarks_db = load_remarks()
 
 @st.cache_resource
 def init_cloud_font():
+    """💡 雲端智慧字體機制：若找不到字體，自動從網路高速下載輕量中文字體，徹底免去 GitHub 上傳限制"""
+    if not os.path.exists(FONT_FILE):
+        try:
+            # 下載微軟正黑/思源級別的免費開源繁體中文字體
+            url = "https://github.com/steveruizok/noto-fonts/raw/master/hinted/NotoSansTC/NotoSansTC-Regular.ttf"
+            urllib.request.urlretrieve(url, FONT_FILE)
+        except Exception as e:
+            st.error(f"雲端中文字體下載失敗，PDF 可能無法正常顯示中文：{str(e)}")
+
+@st.cache_resource
+def init_cloud_font():
     """💡 智慧防卡死字體機制：改用極速多源下載，且限制最長連線時間只有 2 秒，超時自動放棄，絕不轉圈圈"""
     if not os.path.exists(FONT_FILE):
         # 準備多個最穩定的開源繁體中文字體下載點
@@ -109,14 +120,6 @@ def init_gspread_client(*args, **kwargs):
         
     st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
     st.stop()
-            
-    if os.path.exists(CREDS_FILE):
-        try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
-        except Exception as e: st.error(f"本地憑證檔案解析失敗：{str(e)}")
-        
-    st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
-    st.stop()
-
 gc = init_gspread_client()
 
 def load_cloud_data(sheet_key, columns):
