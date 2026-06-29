@@ -63,19 +63,30 @@ def init_cloud_font():
 def init_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     
-    # 確保字體就緒
-    init_cloud_font()
+    try:
+        init_cloud_font()
+    except: pass
     
+    # 💡 終極相容：優先讀取單行 JSON 壓縮格式，其次讀取 TOML，最後讀本地
     if "gcp_service_account" in st.secrets:
         try:
-            creds_dict = dict(st.secrets["gcp_service_account"])
+            secrets_ref = st.secrets["gcp_service_account"]
+            if "json_creds" in secrets_ref:
+                # 這是最不容易出錯的單行 JSON 讀取法
+                creds_dict = json.loads(secrets_ref["json_creds"])
+            else:
+                creds_dict = dict(secrets_ref)
             return gspread.authorize(Credentials.from_service_account_info(creds_dict, scopes=scope))
-        except Exception as e: st.error(f"雲端環境變數解析失敗：{str(e)}")
+        except Exception as e:
+            st.error(f"❌ 雲端密鑰解析失敗，請檢查 Secrets 格式：{str(e)}")
+            st.stop()
             
     if os.path.exists(CREDS_FILE):
         try: return gspread.authorize(Credentials.from_service_account_file(CREDS_FILE, scopes=scope))
         except Exception as e: st.error(f"本地憑證檔案解析失敗：{str(e)}")
-    return None
+        
+    st.error("❌ 系統尚未配置任何安全密鑰！一般員工請通知後台管理者。")
+    st.stop()
 
 gc = init_gspread_client()
 
