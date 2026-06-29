@@ -92,6 +92,9 @@ def load_cloud_data(sheet_key, columns):
         records = worksheet.get_all_records()
         if not records: return pd.DataFrame(columns=columns)
         df = pd.DataFrame(records).astype(str)
+        # 智慧修正：如果雲端不小心被寫入成「開工日期」，自動更正回「日期」
+        if '開工日期' in df.columns and '日期' not in df.columns:
+            df = df.rename(columns={'開工日期': '日期'})
         for col in columns:
             if col not in df.columns: df[col] = ""
         return df
@@ -104,6 +107,11 @@ def save_cloud_data(df, sheet_key, columns):
         sh = gc.open_by_key(SHEET_IDS[sheet_key])
         worksheet = sh.get_worksheet(0)
         worksheet.clear()
+        
+        # 強制更正欄位名稱：如果資料內包含「開工日期」，一律修正回標準的「日期」
+        if '開工日期' in df.columns:
+            df = df.rename(columns={'開工日期': '日期'})
+            
         df_save = df[columns].copy().fillna("").astype(str)
         data_to_save = [df_save.columns.values.tolist()] + df_save.values.tolist()
         try: worksheet.update(values=data_to_save, range_name="A1")
@@ -224,7 +232,6 @@ if is_admin:
     menu_options = ["工作者基本資料設定", "案場基本資料設定", "案場性質選單維護", "🗓️ 管理者控制台：填報排休與手工修改", "🚀 管理者控制台：自動鋪底稿與微調", "📊 班表大印製中心：正式 PDF 產出", "📱 員工專區：個人班表出勤直式查詢"]
 else:
     st.sidebar.info(f"👥 當前身分：{st.session_state.current_user_name} (一般員工)")
-    # 🚀 升級新增：員工專區加入獨立的修改密碼分頁
     menu_options = ["🗓️ 員工專區：線上登記請假排休", "📱 員工專區：個人班表出勤直式查詢", "🔐 員工專區：修改個人登入密碼"]
 
 page = st.sidebar.radio("請選擇功能頁面：", menu_options)
@@ -241,7 +248,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     if 'data_loaded' in st.session_state: del st.session_state['data_loaded']
     st.rerun()
 
-st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V9.8")
+st.sidebar.caption("專業勤務排班系統 雲端網頁正式版 V10.0")
 
 # 通用函數
 def parse_single_shift_hours(t_in, t_out):
@@ -664,7 +671,8 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 
                 st.session_state.schedule_db = df_schedule
                 with st.spinner("⚡ 正在打包大批次班表並高速同步至雲端資料庫..."):
-                    同步成功 = save_cloud_data(df_schedule, 'schedule', ['開工日期' if '開工日期' in df_schedule.columns else '日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
+                    # 🚀 修正鎖定：強制指定寫入標準的「日期」欄位，拒絕任何動態欄位混淆
+                    同步成功 = save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
                 
                 if 同步成功:
                     st.session_state.matrix_form_version += 1
@@ -718,7 +726,8 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             st.rerun()
                     else:
                         st.session_state.schedule_db = df_schedule_run
-                        save_cloud_data(df_schedule_run, 'schedule', ['開工日期' if '開工日期' in df_schedule_run.columns else '日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
+                        # 🚀 修正鎖定：強制指派寫入「日期」
+                        save_cloud_data(df_schedule_run, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
                         st.success(f"🗑️ 已成功撤除該時段的【{m_role}】人員配置。")
                         st.rerun()
             else: st.warning(f"⚠️ 提示：該案場目前未設定 any 工作時間區段。")
@@ -729,7 +738,7 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 st.dataframe(df_sorted, use_container_width=True)
                 if st.button("🚨 重置與清空雲端排班庫"):
                     st.session_state.schedule_db = pd.DataFrame(columns=['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
-                    save_cloud_data(st.session_state.schedule_db, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
+                    save_cloud_data(st.session_state.schedule_db, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區 wilderness', '時源工時', '派駐職位'])
                     st.rerun()
 
 elif page == "📊 班表大印製中心：正式 PDF 產出":
@@ -953,7 +962,7 @@ elif page == "📱 員工專區：個人班表出勤直式查詢":
             except Exception as e: st.error(f"❌ PDF 產生失敗，請重試：{str(e)}")
 
 # ==========================================
-# 🚀 升級新增：一般員工自主改密碼介面
+# 🚀 一般員工自主改密碼介面
 # ==========================================
 else:
     st.title("🔐 員工線上密碼變更自主中心")
@@ -971,7 +980,6 @@ else:
             submit_change_pwd = st.form_submit_button("💾 確認變更密碼並即時同步雲端", type="primary", use_container_width=True)
             
             if submit_change_pwd:
-                # 抓取雲端此員工的整列資料
                 w_df = st.session_state.workers_db.copy()
                 match_worker_rows = w_df[w_df['姓名'] == st.session_state.current_user_name]
                 
@@ -990,7 +998,6 @@ else:
                     elif new_input_1 != new_input_2:
                         st.error("❌ 覆核失敗：兩次輸入的新密碼不一致，請重新輸入。")
                     else:
-                        # 通過驗證，開始執行更新
                         idx = w_df[w_df['姓名'] == st.session_state.current_user_name].index[0]
                         w_df.at[idx, '登入密碼'] = str(new_input_1).strip()
                         
@@ -1005,7 +1012,7 @@ else:
     with col_pwd2:
         st.info(
             "💡 **密碼變更小常識**：\n\n"
-            "1. 密碼建議設定 6 位數以上的英文字母或數字組合，避免使用簡單的生日。\n"
+            "1. 密碼建議設定 6 位數以上的英文字母 or 數字組合，避免使用簡單的生日。\n"
             "2. 如果忘記了自訂的新密碼，可以請最高管理者（峰哥）前往管理控制台直接重置您的密碼。\n"
             "3. 系統全新引入 Google API 流量管制安全連線鎖，保證您的資料不外洩。"
         )
