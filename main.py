@@ -173,7 +173,7 @@ if not st.session_state.logged_in:
             emp_names = st.session_state.workers_db['姓名'].tolist() if not st.session_state.workers_db.empty and st.session_state.workers_db['姓名'].tolist()[0] != "" else []
             if emp_names:
                 login_name = st.selectbox("請選擇您的姓名", emp_names)
-                login_pwd = st.text_input("請輸入登入密碼 (預設為您的行動電話號碼)", type="password")
+                login_pwd = st.text_input("請輸入登入密碼 (預設為您的行動電話號碼，如0912-345-678，不可省略-)", type="password")
                 if st.button("🚪 驗證並登入", use_container_width=True, type="primary"):
                     worker_row = st.session_state.workers_db[st.session_state.workers_db['姓名'] == login_name].iloc[0]
                     db_pwd = str(worker_row.get('登入密碼', '')).strip()
