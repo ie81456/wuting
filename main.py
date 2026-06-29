@@ -656,6 +656,7 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
             days_count = end_date.day
         except: days_count = 31
         
+        
         week_mapping = {0: "一", 1: "二", 2: "三", 3: "四", 4: "五", 5: "六", 6: "日"}
         rows_list = []
         for d in range(1, days_count + 1):
@@ -672,12 +673,12 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
             if not l_db.empty and l_db['日期'].tolist()[0] != "":
                 day_leave = l_db[(l_db['日期'] == d_str) & (l_db['案場名稱'] == sel_site)]
                 if not day_leave.empty: 
-                       leave_text = "、".join([f"{r['員工姓名']} ({str(r['請假時段']).replace('整天全時段', '全天班').replace('全天時段', '全天班')}休)" for _, r in day_leave.iterrows()])
+                    leave_text = "、".join([f"{r['員工姓名']} ({str(r['請假時段']).replace('整天全時段', '全天班').replace('全天時段', '全天班')}休)" for _, r in day_leave.iterrows()])
             
-            # 💡 核心優化：取消勤務人員姓名的 \n 強制換行符號，改為一體化漂亮橫向顯示
+            # 💡 核心優化：取消強制換行，且自動將時段名稱替換為「全天班」
             worker_shift_text = ""
-           if not day_site_data.empty: 
-                  worker_shift_text = " / ".join([f"{r['員工姓名']} ({str(r['班段名稱']).replace('全天時段', '全天班')})" for _, r in day_site_data.iterrows()])
+            if not day_site_data.empty: 
+                worker_shift_text = " / ".join([f"{r['員工姓名']} ({str(r['班段名稱']).replace('全天時段', '全天班')})" for _, r in day_site_data.iterrows()])
             
             date_key = f"{sel_site}_{sel_year}-{sel_month:02d}-{d:02d}"
             remark_text = remarks_db.get(date_key, "")
