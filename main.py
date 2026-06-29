@@ -89,26 +89,44 @@ def load_cloud_data(sheet_key, columns):
     try:
         sh = gc.open_by_key(SHEET_IDS[sheet_key])
         worksheet = sh.get_worksheet(0)
-        records = worksheet.get_all_records()
+        
+        # 🚀 終極相容性破冰修正
+        try:
+            records = worksheet.get_all_records()
+        except Exception:
+            # 如果因為標題列毀損導致 get_all_records 報錯，強行撈取生數據並手動更正
+            raw_rows = worksheet.get_all_values()
+            if not raw_rows: return pd.DataFrame(columns=columns)
+            header = raw_rows[0]
+            # 強制校正 A1 的不正常標題
+            if header and ('開工日期' in str(header[0]) or not header[0]):
+                header[0] = '日期'
+            df_raw = pd.DataFrame(raw_rows[1:], columns=header)
+            df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()] # 移除重複
+            df_str = df_raw.astype(str)
+            for col in columns:
+                if col not in df_str.columns: df_str[col] = ""
+            return df_str[columns]
+
         if not records: return pd.DataFrame(columns=columns)
         df = pd.DataFrame(records).astype(str)
-        # 智慧修正：如果雲端不小心被寫入成「開工日期」，自動更正回「日期」
-        if '開工日期' in df.columns and '日期' not in df.columns:
+        
+        # 再次防呆判定
+        if '開工日期' in df.columns:
             df = df.rename(columns={'開工日期': '日期'})
         for col in columns:
             if col not in df.columns: df[col] = ""
-        return df
-    except: return pd.DataFrame(columns=columns)
+        return df[columns]
+    except Exception as e:
+        return pd.DataFrame(columns=columns)
 
 def save_cloud_data(df, sheet_key, columns):
-    """💡 安全連線鎖：回傳成功或失敗布林值，防止被 Google API 擋住時寫入錯誤"""
     if gc is None: return False
     try:
         sh = gc.open_by_key(SHEET_IDS[sheet_key])
         worksheet = sh.get_worksheet(0)
         worksheet.clear()
         
-        # 強制更正欄位名稱：如果資料內包含「開工日期」，一律修正回標準的「日期」
         if '開工日期' in df.columns:
             df = df.rename(columns={'開工日期': '日期'})
             
@@ -189,7 +207,7 @@ if not st.session_state.logged_in:
             emp_names = st.session_state.workers_db['姓名'].tolist() if not st.session_state.workers_db.empty and st.session_state.workers_db['姓名'].tolist()[0] != "" else []
             if emp_names:
                 login_name = st.selectbox("請選擇您的姓名", emp_names)
-                login_pwd = st.text_input("請輸入登入密碼 (預設為您的行動電話號碼，如0912-345-678，不可省略「-」)", type="password")
+                login_pwd = st.text_input("請輸入登入密碼", type="password")
                 if st.button("🚪 驗證並登入", use_container_width=True, type="primary"):
                     worker_row = st.session_state.workers_db[st.session_state.workers_db['姓名'] == login_name].iloc[0]
                     db_pwd = str(worker_row.get('登入密碼', '')).strip()
@@ -262,24 +280,6 @@ def parse_single_shift_hours(t_in, t_out):
         except: return 0.0
     return 0.0
 
-def get_site_active_shifts(site_name):
-    """💡 智慧時段引擎：若案場僅設定一個時段，自動將時段名稱轉換為『全天時段』"""
-    site_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'] == site_name]
-    if site_rows.empty: return {}
-    site_data = site_rows.iloc[0]
-    
-    raw_shifts = {}
-    for i in ["一", "二", "三"]:
-        t_up = str(site_data.get(f'時段{i}_上', "")).strip()
-        t_down = str(site_data.get(f'時段{i}_下', "")).strip()
-        if t_up and t_down and t_up != "None" and t_down != "None":
-            raw_shifts[f"時段{i}"] = f"{t_up}-{t_down}"
-            
-    if len(raw_shifts) == 1 and "時段一" in raw_shifts:
-        return {"全天時段": raw_shifts["時段一"]}
-        
-    return raw_shifts
-
 # 計算「下個月」的預設月份資訊
 today = datetime.date.today()
 first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
@@ -303,7 +303,7 @@ if page == "工作者基本資料設定":
             address = st.text_input("通訊地址", key=f"w_addr_{k}")
             available_sites = st.session_state.sites_db['案場名稱'].tolist() if not st.session_state.sites_db.empty else []
             assigned_sites = st.multiselect("支持/派駐案場 (可複選)", options=available_sites, key=f"w_sites_{k}")
-            new_pwd = st.text_input("設定登入密碼 (留空則預設為行動電話)", key=f"w_pwd_{k}")
+            new_pwd = st.text_input("設定登入密碼", key=f"w_pwd_{k}")
             
             submit_worker = st.form_submit_button("確認新增員工")
             if submit_worker and emp_id and name:
@@ -671,7 +671,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 
                 st.session_state.schedule_db = df_schedule
                 with st.spinner("⚡ 正在打包大批次班表並高速同步至雲端資料庫..."):
-                    # 🚀 修正鎖定：強制指定寫入標準的「日期」欄位，拒絕任何動態欄位混淆
                     同步成功 = save_cloud_data(df_schedule, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
                 
                 if 同步成功:
@@ -726,7 +725,6 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                             st.rerun()
                     else:
                         st.session_state.schedule_db = df_schedule_run
-                        # 🚀 修正鎖定：強制指派寫入「日期」
                         save_cloud_data(df_schedule_run, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
                         st.success(f"🗑️ 已成功撤除該時段的【{m_role}】人員配置。")
                         st.rerun()
@@ -738,7 +736,7 @@ elif page == "🚀 管理者控制台：自動鋪底稿與微調":
                 st.dataframe(df_sorted, use_container_width=True)
                 if st.button("🚨 重置與清空雲端排班庫"):
                     st.session_state.schedule_db = pd.DataFrame(columns=['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
-                    save_cloud_data(st.session_state.schedule_db, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區 wilderness', '時源工時', '派駐職位'])
+                    save_cloud_data(st.session_state.schedule_db, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
                     st.rerun()
 
 elif page == "📊 班表大印製中心：正式 PDF 產出":
@@ -966,7 +964,7 @@ elif page == "📱 員工專區：個人班表出勤直式查詢":
 # ==========================================
 else:
     st.title("🔐 員工線上密碼變更自主中心")
-    st.markdown("為了保障您的排班與請假隱私安全，您可以在此隨時變更新的登入密碼。")
+    st.markdown("為了保障您的排班與請假隱私安全，您可以在此隨文變更新的登入密碼。")
     
     col_pwd1, col_pwd2 = st.columns([1, 1])
     with col_pwd1:
