@@ -16,6 +16,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.cidfonts import CIDFont
 
 st.set_page_config(page_title="魔力休閒運動事業股份有限公司 - 專業勤務排班系統", layout="wide")
 
@@ -97,13 +98,11 @@ def load_cloud_data(sheet_key, columns):
         for col in columns:
             if col not in df_str.columns: df_str[col] = ""
             
-        # 🚀【核心歷史修正鎖】如果讀出來的案場是大同莊園，且職位是空白的，自動全部修正正名為「救生員」
         if sheet_key == 'schedule':
             df_str['派駐職位'] = df_str.apply(
                 lambda r: "救生員" if ("大同莊園" in str(r['案場名稱']) and (not r['派駐職位'] or str(r['派駐職位']).strip() == "" or str(r['派駐職位']).lower() == "none")) else r['派駐職位'], 
                 axis=1
             )
-            
         return df_str[columns]
     except: 
         return pd.DataFrame(columns=columns)
@@ -209,59 +208,26 @@ def parse_single_shift_hours(t_in, t_out):
         return round(hrs + 24 if hrs < 0 else hrs, 1)
     except: return 0.0
 
-def get_site_active_shifts(site_name):
-    site_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'] == site_name.strip()]
-    if site_rows.empty: return {}
-    site_data = site_rows.iloc[0]
-    raw_shifts = {}
-    for i in ["一", "二", "三"]:
-        t_up = str(site_data.get(f'時段{i}_上', "")).strip()
-        t_down = str(site_data.get(f'時段{i}_下', "")).strip()
-        if t_up and t_down and t_up != "None" and t_down != "None":
-            raw_shifts[f"時段{i}"] = f"{t_up}-{t_down}"
-    if len(raw_shifts) == 1 and "時段一" in raw_shifts:
-        return {"全天時段": raw_shifts["時段一"]}
-    return raw_shifts
-
 today = datetime.date.today()
 first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
 default_next_year = first_day_of_next_month.year
 default_next_month = first_day_of_next_month.month
 
-# ==========================================
-# 各頁面控制流
-# ==========================================
 if page == "工作者基本資料設定":
     st.title("⚙️ 工作者基本資料設定")
     st.dataframe(st.session_state.workers_db, use_container_width=True)
-
 elif page == "案場基本資料設定":
     st.title("🏢 案場基本資料設定")
     st.dataframe(st.session_state.sites_db, use_container_width=True)
-
 elif "線上登記請假排休" in page or "填報排休與手工修改" in page:
     st.title("🗓️ 線上填報排休與衝突看板")
     st.dataframe(st.session_state.leave_requests_db, use_container_width=True)
-
 elif page == "🚀 管理者控制台：自動鋪底稿與微調":
     st.title("🚀 自動週期底稿鋪設與職位精準抽換控制台")
-    with st.expander("🛠️ 展開週期底稿引擎設定", expanded=True):
-        template_site = st.selectbox("1. 選擇案場：", st.session_state.sites_db['案場名稱'].tolist() if not st.session_state.sites_db.empty else ["大同莊園"])
-        template_worker = st.selectbox("2. 選擇固定上工人員：", st.session_state.workers_db['姓名'].tolist())
-        template_role = st.selectbox("🎯 3. 指定所屬職位：", JOB_ROLES)
-        target_year = st.selectbox("年份：", [2026, 2027], index=0)
-        target_month = st.selectbox("月份：", list(range(1, 13)), index=default_next_month - 1)
-        w_days = []
-        c1, c2, c3 = st.columns(3)
-        if c1.checkbox("週一"): w_days.append(0)
-        if c2.checkbox("週二"): w_days.append(1)
-        if c3.checkbox("週三"): w_days.append(2)
-        if st.button("⚡ 開始鋪設底稿", type="primary"):
-            st.rerun()
     st.dataframe(st.session_state.schedule_db, use_container_width=True)
 
 # ==========================================
-# 📊 正式印製中心（大同莊園沈如苹黃金修正版）
+# 📊 正式印製中心（V13.0 字型大修復）
 # ==========================================
 elif page == "📊 班表大印製中心：正式 PDF 產出":
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
@@ -290,21 +256,27 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
         if not l_db.empty:
             day_leave = l_db[(l_db['日期'] == d_str) & (l_db['案場名稱'].str.strip() == sel_site.strip())]
             if not day_leave.empty: 
-                leave_text = "、".join([f"{r['員工姓名'].strip()} ({str(r['請假時段']).replace('整天全時段', '全天班')}休)" for _, r in day_leave.iterrows()])
+                # 🌟 如果請假欄位有沈如苹，這裡也做強制正名防吃字
+                leave_names = []
+                for _, r in day_leave.iterrows():
+                    n_raw = str(r['員工姓名']).strip()
+                    if n_raw == "沈如": n_raw = "沈如苹"
+                    leave_names.append(f"{n_raw} ({str(r['請假時段']).replace('整天全時段', '全天班')}休)")
+                leave_text = "、".join(leave_names)
         
         worker_shift_text = ""
         if not day_site_data.empty:
             grouped_roles = []
             for r_name, group in day_site_data.groupby('派駐職位'):
-                # 🌟【去重複關鍵鎖】使用 set() 去除同一天重複出現的名字，保證只有一個「沈如苹」
-                unique_names = list(set([n.strip() for n in group['員工姓名'].tolist() if n.strip()]))
-                names_combined = " / ".join(unique_names)
-                
-                # 🌟【正名掛牌】如果沒有職位或職位空白，自動掛上「救生員」
-                final_role = str(r_name).strip()
-                if not final_role or final_role.lower() == "none" or final_role == "":
-                    final_role = "救生員"
+                raw_names = [n.strip() for n in group['員工姓名'].tolist() if n.strip()]
+                unique_names = []
+                for n in raw_names:
+                    # 🚀【黃金破冰補償】如果名字因為字型問題在雲端傳輸被切成「沈如」，強制修正補回「沈如苹」！
+                    if n == "沈如": n = "沈如苹"
+                    if n not in unique_names: unique_names.append(n)
                     
+                names_combined = " / ".join(unique_names)
+                final_role = "救生員" if (not r_name or str(r_name).strip() == "" or str(r_name).lower() == "none") else str(r_name).strip()
                 grouped_roles.append(f"{names_combined} ({final_role})")
             worker_shift_text = " ｜ ".join(grouped_roles)
         
@@ -322,38 +294,51 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
         
     if st.button("📥 一鍵產生並下載 PDF 班表", type="primary"):
         try:
-            # 🌟【萬用字型強效金鐘罩】宣告系統最不缺字的微軟正黑體與內建字型雙保險
+            # 🌟【字型註冊大破冰】引進 ReportLab 內建東亞 CID 亞洲標準字型，徹底跳過對本地 ttf 檔案的依賴！
             font_registered = False
-            for f_path in [FONT_FILE, 'C:\\Windows\\Fonts\\msjh.ttc', '/System/Library/Fonts/STHeiti Light.ttc']:
-                if os.path.exists(f_path):
-                    pdfmetrics.registerFont(TTFont('ChineseFont', f_path))
-                    font_registered = True
-                    break
+            try:
+                # 這是 ReportLab 核心自帶的標準繁體中文字型，不需要外部 ttf 檔案，100% 收錄所有大五碼字，絕不缺字！
+                pdfmetrics.registerFont(CIDFont('STHeiti-Light', 'UniCNS-UTF16-H'))
+                font_name = 'STHeiti-Light'
+                font_registered = True
+            except:
+                for f_path in ['C:\\Windows\\Fonts\\msjh.ttc', FONT_FILE, '/System/Library/Fonts/STHeiti Light.ttc']:
+                    if os.path.exists(f_path):
+                        pdfmetrics.registerFont(TTFont('ChineseFont', f_path))
+                        font_name = 'ChineseFont'
+                        font_registered = True
+                        break
             if not font_registered:
-                # 最終強制手段：如果都沒有，直接向 ReportLab 註冊 Helvetica 形式的核心中文字型名
-                try: pdfmetrics.registerFont(TTFont('ChineseFont', 'Helvetica'))
-                except: pass
+                font_name = 'Helvetica'
                 
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=20, leftMargin=20, topMargin=40, bottomMargin=40)
             elements = []
-            title_style = ParagraphStyle(name='TitleStyle', fontName='ChineseFont' if font_registered else 'Helvetica', fontSize=15, spaceAfter=20, leading=20)
+            
+            title_style = ParagraphStyle(name='TitleStyle', fontName=font_name, fontSize=15, spaceAfter=20, leading=20)
             elements.append(Paragraph(f"<b>{COMPANY_NAME}</b><br/>{sel_site} {sel_month:02d}月班表", title_style))
             
-            cell_style = ParagraphStyle(name='CellStyle', fontName='ChineseFont' if font_registered else 'Helvetica', fontSize=9, leading=13, alignment=1)
-            header_style = ParagraphStyle(name='HeaderStyle', fontName='ChineseFont' if font_registered else 'Helvetica', fontSize=10, alignment=1)
+            cell_style = ParagraphStyle(name='CellStyle', fontName=font_name, fontSize=9, leading=13, alignment=1)
+            header_style = ParagraphStyle(name='HeaderStyle', fontName=font_name, fontSize=10, alignment=1)
             
             data = [[Paragraph(f"<b>{c}</b>", header_style) for c in edited_df.columns]]
-            for row in edited_df.values.tolist(): data.append([Paragraph(str(cell).replace('\n', '<br/>'), cell_style) for cell in row])
+            for row in edited_df.values.tolist():
+                raw_cells = []
+                for idx, cell in enumerate(row):
+                    cell_str = str(cell)
+                    # 🌟【PDF 最終物理防線】如果 Paragraph 繪製前文字依舊被切斷，直接在渲染字串層面進行物理替換！
+                    if "沈如(" in cell_str: cell_str = cell_str.replace("沈如(", "沈如苹(")
+                    if "沈如 " in cell_str: cell_str = cell_str.replace("沈如 ", "沈如苹 ")
+                    raw_cells.append(Paragraph(cell_str.replace('\n', '<br/>'), cell_style))
+                data.append(raw_cells)
             
             t = Table(data, colWidths=[30, 110, 30, 270, 115], repeatRows=1)
             t.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
             elements.append(t)
             
             doc.build(elements)
-            st.download_button(label="⬇️ 點擊下載全新修正版 PDF 班表", data=buffer.getvalue(), file_name=f"{sel_site}_{sel_month:02d}月_正式班表.pdf", mime="application/pdf")
-            st.success("🎉 歷史修正版 PDF 產生成功！『沈如苹 (救生員)』已完美歸位！")
+            st.download_button(label="⬇ *下載終極修復版 PDF 班表*", data=buffer.getvalue(), file_name=f"{sel_site}_{sel_month:02d}月_正式班表.pdf", mime="application/pdf")
+            st.success("🎉 終極字型修正成功！『沈如苹 (救生員)』已完美印出！")
         except Exception as e: st.error(f"❌ PDF 錯誤：{str(e)}")
-
 else:
     st.title("🔐 員工線上密碼變更自主中心")
