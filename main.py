@@ -28,13 +28,13 @@ COMPANY_NAME = "魔力休閒運動事業股份有限公司"
 
 JOB_ROLES = ["會館主任", "救生員", "男湯人員", "女湯人員", "物業人員", "代班人員"]
 
-# 🧠 智慧 LOGO 轉網頁 HTML 內嵌編碼防線（靠左浮動適配範例）
 def get_logo_html_tag():
     if os.path.exists(LOGO_FILE):
         try:
             with open(LOGO_FILE, "rb") as image_file:
                 encoded_string = base64.b64encode(image_file.read()).decode()
-            return f'<img src="data:image/png;base64,{encoded_string}" style="max-height: 50px; float: left; margin-right: 15px;">'
+            # 配合整體版面放大，微調 LOGO 最大高度至 65px
+            return f'<img src="data:image/png;base64,{encoded_string}" style="max-height: 65px; float: left; margin-right: 18px; margin-top: 5px;">'
         except:
             return ""
     return ""
@@ -182,7 +182,7 @@ if not st.session_state.logged_in:
 
 is_admin = (st.session_state.user_role == "admin")
 if is_admin:
-    menu_options = ["工作者基本資料設定", "案場基本資料設定", "🗓️ 管理者控制台：填報排休與手工修改", "🚀 管理者控制台：自動鋪底稿與微調", "📊 班表大印製中心：正式 PDF 產出", "📱 員工專區：個人班表出勤直式查詢"]
+    menu_options = ["工作者基本資料設定", "案場基本資料設定", "🗓️ 管理者控制台：填報排休與手工修改", "🚀 管理者控制台：自動鋪底稿與微調", "📊 班表大印製中心：正式 PDF 產出", "📱 員工專專區：個人班表出勤直式查詢"]
 else:
     menu_options = ["🗓️ 員工專區：線上登記請假排休", "📱 員工專區：個人班表出勤直式查詢", "🔐 員工專區：修改個人登入密碼"]
 
@@ -197,7 +197,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     st.session_state.logged_in = False
     st.rerun()
 
-# 基礎頁面分流
+# 基礎分流頁面
 if "工作者基本資料設定" in page_clean:
     st.title("⚙️ 工作者基本資料設定")
     st.dataframe(st.session_state.workers_db, use_container_width=True, hide_index=True)
@@ -212,7 +212,7 @@ elif "自動鋪底稿" in page_clean:
     st.dataframe(st.session_state.schedule_db, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 📊 正式印製中心 (橫式總班表 - 完全對齊範例)
+# 📊 正式印製中心 (橫式總班表 - A4 滿版放大優化版)
 # ==========================================
 elif "班表大印製中心" in page_clean:
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
@@ -269,21 +269,21 @@ elif "班表大印製中心" in page_clean:
     for r in edited_df.to_dict(orient='records'):
         html_table_rows += f"""
         <tr>
-            <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['日期']}</td>
-            <td style='padding:6px; border:1px solid #000; color:red;'>{r['休假']}</td>
-            <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['星期']}</td>
-            <td style='padding:6px; border:1px solid #000; font-weight:bold;'>{r['班別 / 勤務人員']}</td>
-            <td style='padding:6px; border:1px solid #000;'>{r['備註']}</td>
+            <td style='text-align:center; padding:10px 6px; border:1px solid #000;'>{r['日期']}</td>
+            <td style='padding:10px 8px; border:1px solid #000; color:red;'>{r['休假']}</td>
+            <td style='text-align:center; padding:10px 6px; border:1px solid #000;'>{r['星期']}</td>
+            <td style='padding:10px 8px; border:1px solid #000; font-weight:bold;'>{r['班別 / 勤務人員']}</td>
+            <td style='padding:10px 8px; border:1px solid #000;'>{r['備註']}</td>
         </tr>
         """
     
-    # 🌟 從資料庫提取該案場的注意事項
     site_notes_html = ""
     s_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'] == sel_site.strip()]
     if not s_rows.empty and s_rows.iloc[0]['注意事項']:
         notes_lines = str(s_rows.iloc[0]['注意事項']).split('\n')
-        site_notes_html += "<div style='margin-top:15px; font-size:13px; font-family:\"Microsoft JhengHei\"; line-height:1.5; color:#000; text-align:left;'>"
-        site_notes_html += "<b style='font-size:14px;'>填表說明/注意事項：</b><br>"
+        # 🌟 注意事項字體放大至 15px
+        site_notes_html += "<div style='margin-top:20px; font-size:15px; font-family:\"Microsoft JhengHei\"; line-height:1.6; color:#000; text-align:left;'>"
+        site_notes_html += "<b style='font-size:16px;'>填表說明/注意事項：</b><br>"
         for line in notes_lines:
             if line.strip():
                 site_notes_html += f"<div style='margin-left:5px;'>{line}</div>"
@@ -296,24 +296,27 @@ elif "班表大印製中心" in page_clean:
             body {{ background: #fff; color: #000; padding: 0; margin: 0; }}
             .no-print {{ display: none !important; }}
             #printArea {{ width: 100%; padding: 0 !important; }}
+            /* 橫式班表自動導向橫向列印 */
+            @page {{ size: A4 landscape; margin: 1cm; }}
         }}
     </style>
-    <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:15px; background:#fff; color:#000;'>
-        <div style='width:100%; overflow:hidden; margin-bottom:10px;'>
+    {html_table_rows if False else ""}
+    <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:10px; background:#fff; color:#000; width:100%;box-sizing:border-box;'>
+        <div style='width:100%; overflow:hidden; margin-bottom:15px;'>
             {logo_tag}
-            <div style='float:left; padding-top:2px;'>
-                <h2 style='margin:0; font-size:20px; font-weight:bold; letter-spacing:1px;'>{COMPANY_NAME}</h2>
-                <h3 style='margin:2px 0 0 0; font-size:16px; color:#333;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
+            <div style='float:left; padding-top:5px;'>
+                <h2 style='margin:0; font-size:26px; font-weight:bold; letter-spacing:1px;'>{COMPANY_NAME}</h2>
+                <h3 style='margin:4px 0 0 0; font-size:20px; color:#222;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
             </div>
         </div>
-        <table style='width:100%; border-collapse:collapse; background:#fff; font-size:13px; clear:both;'>
+        <table style='width:100%; border-collapse:collapse; background:#fff; font-size:16px; clear:both;'>
             <thead>
-                <tr style='background-color:#f2f2f2;'>
-                    <th style='width:6%; border:1px solid #000; padding:6px;'>日期</th>
-                    <th style='width:22%; border:1px solid #000; padding:6px;'>休假</th>
-                    <th style='width:6%; border:1px solid #000; padding:6px;'>星期</th>
-                    <th style='width:46%; border:1px solid #000; padding:6px;'>班別 / 勤務人員</th>
-                    <th style='width:20%; border:1px solid #000; padding:6px;'>備註</th>
+                <tr style='background-color:#f2f2f2; height:40px;'>
+                    <th style='width:6%; border:1px solid #000; padding:10px;'>日期</th>
+                    <th style='width:22%; border:1px solid #000; padding:10px;'>休假</th>
+                    <th style='width:6%; border:1px solid #000; padding:10px;'>星期</th>
+                    <th style='width:46%; border:1px solid #000; padding:10px;'>班別 / 勤務人員</th>
+                    <th style='width:20%; border:1px solid #000; padding:10px;'>備註</th>
                 </tr>
             </thead>
             <tbody>
@@ -322,16 +325,16 @@ elif "班表大印製中心" in page_clean:
         </table>
         {site_notes_html}
     </div>
-    <div class='no-print' style='text-align:center; margin-top:15px;'>
-        <button onclick='window.print();' style='padding:12px 35px; font-size:16px; font-weight:bold; background-color:#1E88E5; color:white; border:none; border-radius:5px; cursor:pointer;'>🖨️ 點擊啟動 PDF 列印與儲存中心 (自動隱藏周邊元件)</button>
+    <div class='no-print' style='text-align:center; margin-top:20px;'>
+        <button onclick='window.print();' style='padding:14px 40px; font-size:18px; font-weight:bold; background-color:#1E88E5; color:white; border:none; border-radius:5px; cursor:pointer; box-shadow: 0px 3px 6px rgba(0,0,0,0.2);'>🖨️ 啟動 A4 橫式班表放大列印中心</button>
     </div>
     """
     st.markdown("---")
-    st.subheader("📋 橫式班表範例級預覽")
-    st.components.v1.html(full_html_document, height=650, scrolling=True)
+    st.subheader("📋 橫式總班表 A4 滿版放大預覽")
+    st.components.v1.html(full_html_document, height=720, scrolling=True)
 
 # ==========================================
-# 📱 員工個人出勤直式查詢 (注意事項與 LOGO 左上置入)
+# 📱 員工個人出勤直式查詢 (直式 A4 滿版放大版)
 # ==========================================
 elif "個人班表出勤直式查詢" in page_clean:
     st.title("📱 員工個人出勤班表直式查詢與 PDF 產出")
@@ -350,7 +353,7 @@ elif "個人班表出勤直式查詢" in page_clean:
     s_db = st.session_state.schedule_db.copy()
     
     if not s_db.empty:
-        s_db['Month_Int'] = s_db['滿足月份'] = s_db['日期'].apply(lambda x: int(x.split('-')[1]) if '-' in str(x) else 0)
+        s_db['Month_Int'] = s_db['日期'].apply(lambda x: int(x.split('-')[1]) if '-' in str(x) else 0)
         s_db['Year_Int'] = s_db['日期'].apply(lambda x: int(x.split('-')[0]) if '-' in str(x) else 0)
         
         emp_records = s_db[(s_db['員工姓名'].str.strip() == target_emp.strip()) & (s_db['Year_Int'] == q_year) & (s_db['Month_Int'] == q_month)]
@@ -380,27 +383,27 @@ elif "個人班表出勤直式查詢" in page_clean:
                 
                 grouped_rows_html += f"""
                 <tr>
-                    <td style='text-align:center; padding:8px; border:1px solid #000; vertical-align:middle;'>{date_val}</td>
-                    <td style='padding:8px; border:1px solid #000; vertical-align:middle;'>{site_val}</td>
-                    <td style='text-align:center; padding:8px; border:1px solid #000; vertical-align:middle;'>{shifts_combined}</td>
-                    <td style='text-align:center; padding:8px; border:1px solid #000; vertical-align:middle;'>{intervals_combined}</td>
-                    <td style='padding:8px; border:1px solid #000; font-weight:bold; vertical-align:middle;'>{roles_combined}</td>
+                    <td style='text-align:center; padding:12px; border:1px solid #000; vertical-align:middle;'>{date_val}</td>
+                    <td style='padding:12px; border:1px solid #000; vertical-align:middle;'>{site_val}</td>
+                    <td style='text-align:center; padding:12px; border:1px solid #000; vertical-align:middle;'>{shifts_combined}</td>
+                    <td style='text-align:center; padding:12px; border:1px solid #000; vertical-align:middle;'>{intervals_combined}</td>
+                    <td style='padding:12px; border:1px solid #000; font-weight:bold; vertical-align:middle;'>{roles_combined}</td>
                 </tr>
                 """
             
             st.success(f"📋 已優化【{target_emp}】當月直式班表為『一天一列』明細：")
             st.dataframe(pd.DataFrame(preview_list), use_container_width=True, hide_index=True)
             
-            # 🌟 直式班表下方同樣提取對應案場的注意事項
             emp_notes_html = ""
             if distinct_sites:
                 emp_s_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'].isin(distinct_sites)]
                 if not emp_s_rows.empty:
-                    emp_notes_html += "<div style='margin-top:15px; font-size:12px; font-family:\"Microsoft JhengHei\"; line-height:1.4; color:#000; text-align:left;'>"
-                    emp_notes_html += "<b>指派案場注意事項說明：</b>"
+                    # 🌟 直式注意事項也同步放大
+                    emp_notes_html += "<div style='margin-top:20px; font-size:14px; font-family:\"Microsoft JhengHei\"; line-height:1.6; color:#000; text-align:left;'>"
+                    emp_notes_html += "<b style='font-size:15px;'>指派案場注意事項說明：</b>"
                     for _, s_row in emp_s_rows.iterrows():
                         if s_row['注意事項']:
-                            emp_notes_html += f"<div style='margin-top:4px; font-weight:bold; color:#1E88E5;'>【{s_row['案場名稱']}】</div>"
+                            emp_notes_html += f"<div style='margin-top:6px; font-weight:bold; color:#1E88E5;'>【{s_row['案場名稱']}】</div>"
                             for line in str(s_row['注意事項']).split('\n'):
                                 if line.strip():
                                     emp_notes_html += f"<div style='margin-left:10px;'>{line}</div>"
@@ -413,24 +416,25 @@ elif "個人班表出勤直式查詢" in page_clean:
                     body {{ background: #fff; color: #000; padding: 0; margin: 0; }}
                     .no-print {{ display: none !important; }}
                     #printArea {{ width: 100%; padding: 0 !important; }}
+                    @page {{ size: A4 portrait; margin: 1.2cm; }}
                 }}
             </style>
-            <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:15px; background:#fff; color:#000;'>
-                <div style='width:100%; overflow:hidden; margin-bottom:10px;'>
+            <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:10px; background:#fff; color:#000;'>
+                <div style='width:100%; overflow:hidden; margin-bottom:15px;'>
                     {logo_tag}
-                    <div style='float:left; padding-top:2px;'>
-                        <h3 style='margin:0; font-size:18px; font-weight:bold; letter-spacing:1px;'>{COMPANY_NAME}</h3>
-                        <h4 style='margin:2px 0 0 0; font-size:14px; color:#333;'>同仁【{target_emp}】{q_year}年{q_month:02d}月份 個人出勤直式明細表</h4>
+                    <div style='float:left; padding-top:5px;'>
+                        <h3 style='margin:0; font-size:24px; font-weight:bold; letter-spacing:1px;'>{COMPANY_NAME}</h3>
+                        <h4 style='margin:4px 0 0 0; font-size:18px; color:#222;'>同仁【{target_emp}】{q_year}年{q_month:02d}月份 個人出勤直式明細表</h4>
                     </div>
                 </div>
-                <table style='width:100%; border-collapse:collapse; background:#fff; font-size:13px; clear:both;'>
+                <table style='width:100%; border-collapse:collapse; background:#fff; font-size:15px; clear:both;'>
                     <thead>
-                        <tr style='background-color:#f5f5f5;'>
-                            <th style='border:1px solid #000; padding:8px; width:15%;'>出勤日期</th>
-                            <th style='border:1px solid #000; padding:8px; width:25%;'>指派案場</th>
-                            <th style='border:1px solid #000; padding:8px; width:20%;'>班段</th>
-                            <th style='border:1px solid #000; padding:8px; width:25%;'>時間區間</th>
-                            <th style='border:1px solid #000; padding:8px; width:15%;'>擔任職位</th>
+                        <tr style='background-color:#f5f5f5; height:38px;'>
+                            <th style='border:1px solid #000; padding:10px; width:15%;'>出勤日期</th>
+                            <th style='border:1px solid #000; padding:10px; width:25%;'>指派案場</th>
+                            <th style='border:1px solid #000; padding:10px; width:20%;'>班段</th>
+                            <th style='border:1px solid #000; padding:10px; width:25%;'>時間區間</th>
+                            <th style='border:1px solid #000; padding:10px; width:15%;'>擔任職位</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -439,12 +443,12 @@ elif "個人班表出勤直式查詢" in page_clean:
                 </table>
                 {emp_notes_html}
             </div>
-            <div class='no-print' style='text-align:center; margin-top:15px;'>
-                <button onclick='window.print();' style='padding:10px 30px; font-size:14px; font-weight:bold; background-color:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer;'>🖨️ 導出/列印個人直式班表 PDF (自動隱藏雜質)</button>
+            <div class='no-print' style='text-align:center; margin-top:20px;'>
+                <button onclick='window.print();' style='padding:12px 35px; font-size:16px; font-weight:bold; background-color:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer; box-shadow: 0px 2px 5px rgba(0,0,0,0.2);'>🖨️ 啟動 A4 直式個人班表放大列印</button>
             </div>
             """
             st.markdown("---")
-            st.subheader("📄 直式班表範例級列印預覽")
-            st.components.v1.html(emp_html_doc, height=520, scrolling=True)
+            st.subheader("📄 直式個人班表 A4 滿版放大預覽")
+            st.components.v1.html(emp_html_doc, height=580, scrolling=True)
         else:
             st.info(f"ℹ️ 雲端資料庫中目前尚無【{target_emp}】在 {q_year} 年 {q_month} 月的出勤記錄。")
