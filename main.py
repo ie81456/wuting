@@ -5,6 +5,7 @@ import os
 import json
 import io
 import re
+import base64
 from google.oauth2.service_account import Credentials
 import gspread
 
@@ -26,6 +27,17 @@ REMARKS_FILE = 'remarks.json'
 COMPANY_NAME = "魔力休閒運動事業股份有限公司"
 
 JOB_ROLES = ["會館主任", "救生員", "男湯人員", "女湯人員", "物業人員", "代班人員"]
+
+# 🧠 智慧 LOGO 轉網頁 HTML 內嵌編碼防線
+def get_logo_html_tag():
+    if os.path.exists(LOGO_FILE):
+        try:
+            with open(LOGO_FILE, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode()
+            return f'<img src="data:image/png;base64,{encoded_string}" style="max-height: 60px; display: block; margin: 0 auto 10px auto;">'
+        except:
+            return ""
+    return ""
 
 def load_remarks():
     if os.path.exists(REMARKS_FILE):
@@ -125,15 +137,13 @@ first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).r
 default_next_year = first_day_of_next_month.year
 default_next_month = first_day_of_next_month.month
 
-# 🌟 核心升級 3：員工名冊依據「員工編號」轉換、補零排序、產生格式化名單選單
+# 員工名冊依據「員工編號」轉換、補零排序、產生格式化名單選單
 worker_options = []
 if not st.session_state.workers_db.empty:
     w_df = st.session_state.workers_db.copy()
-    # 智慧排序防線：將編號轉成數字或格式化補零進行排序，避免 10 排在 2 前面
     w_df['sort_id'] = pd.to_numeric(w_df['員工編號'], errors='coerce').fillna(999)
     w_df = w_df.sort_values(by='sort_id').reset_index(drop=True)
     st.session_state.workers_db = w_df.drop(columns=['sort_id'])
-    
     for idx, r in st.session_state.workers_db.iterrows():
         worker_options.append(f"[{str(r['員工編號']).strip()}] {str(r['姓名']).strip()}")
 
@@ -144,7 +154,6 @@ if not st.session_state.logged_in:
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown(f"<h2 style='text-align: center;'>{COMPANY_NAME}<br>專業勤務排班系統</h2>", unsafe_allow_html=True)
         st.markdown("---")
-        
         tab_emp, tab_admin = st.tabs(["👥 員工專區登入", "👑 系統管理者登入"])
         with tab_emp:
             if worker_options:
@@ -190,7 +199,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
 
 # 各基本資料頁面
 if "工作者基本資料設定" in page_clean:
-    st.title("⚙️ 工作者基本資料設定 (已依員工編號排序)")
+    st.title("⚙️ 工作者基本資料設定")
     st.dataframe(st.session_state.workers_db, use_container_width=True, hide_index=True)
 elif "案場基本資料設定" in page_clean:
     st.title("🏢 案場基本資料設定")
@@ -203,7 +212,7 @@ elif "自動鋪底稿" in page_clean:
     st.dataframe(st.session_state.schedule_db, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 📊 正式印製中心 (網頁高解析列印引擎修正)
+# 📊 正式印製中心 (橫式總班表)
 # ==========================================
 elif "班表大印製中心" in page_clean:
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
@@ -256,7 +265,6 @@ elif "班表大印製中心" in page_clean:
         save_remarks(remarks_db)
         st.success("✅ 備註資料已成功儲存！")
         
-    # 🌟 革命升級：直接產生 100% 不缺字的標準前端列印網頁
     html_table_rows = ""
     for r in edited_df.to_dict(orient='records'):
         html_table_rows += f"""
@@ -269,9 +277,11 @@ elif "班表大印製中心" in page_clean:
         </tr>
         """
         
+    logo_tag = get_logo_html_tag()
     full_html_document = f"""
     <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:20px; background:#fff; color:#000;'>
-        <h2 style='text-align:center; margin-bottom:5px;'>{COMPANY_NAME}</h2>
+        {logo_tag}
+        <h2 style='text-align:center; margin-bottom:5px; margin-top:5px;'>{COMPANY_NAME}</h2>
         <h3 style='text-align:center; margin-top:0; margin-bottom:20px;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
         <table style='width:100%; border-collapse:collapse; background:#fff;'>
             <thead>
@@ -293,18 +303,17 @@ elif "班表大印製中心" in page_clean:
     </div>
     """
     st.markdown("---")
-    st.subheader("📋 預覽正式發佈班表 (下方按鈕可直接另存為 PDF，永不缺字)")
+    st.subheader("📋 預覽正式發佈班表 (下方按鈕可直接另存為 PDF)")
     st.components.v1.html(full_html_document, height=650, scrolling=True)
 
 # ==========================================
-# 📱 員工個人出勤直式查詢 (PDF 產出全面回歸)
+# 📱 員工個人出勤直式查詢 (一天一列合併優化版)
 # ==========================================
 elif "個人班表出勤直式查詢" in page_clean:
     st.title("📱 員工個人出勤班表直式查詢與 PDF 產出")
     
     current_worker = st.session_state.current_user_name if st.session_state.current_user_name else "系統管理者"
     
-    # 🌟 核心升級：這裡的下拉選單同步套用「[工號] 姓名」且排序過的格式
     if worker_options:
         selected_emp_format = st.selectbox("請核對或選擇欲查詢的員工工號及姓名：", worker_options)
         target_emp = selected_emp_format.split("] ")[1].strip() if "] " in selected_emp_format else selected_emp_format
@@ -324,37 +333,59 @@ elif "個人班表出勤直式查詢" in page_clean:
         
         if not emp_records.empty:
             sorted_records = emp_records[['日期', '案場名稱', '班段名稱', '時段區間', '派駐職位']].sort_values(by='日期').reset_index(drop=True)
-            st.dataframe(sorted_records, use_container_width=True, hide_index=True)
             
-            # 🌟 核心復活：利用網頁高階列印引擎，一鍵將個人的直式勤務表導出成 PDF！
-            html_emp_rows = ""
-            for r in sorted_records.to_dict(orient='records'):
-                html_emp_rows += f"""
+            # 🌟【核心升級：一天一列智慧合併引擎】按日期與案場將多個時段抽離合併
+            grouped_rows_html = ""
+            # 用於網頁預覽呈現的聚合 DataList
+            preview_list = []
+            
+            for (date_val, site_val), group in sorted_records.groupby(['日期', '案場名稱']):
+                # 將多個時段與區間用換行符號 <br> 連接
+                shifts_combined = "<br>".join(group['班段名稱'].tolist())
+                intervals_combined = "<br>".join(group['時段區間'].tolist())
+                roles_combined = "<br>".join(list(set(group['派駐職位'].tolist())))
+                
+                preview_list.append({
+                    "出勤日期": date_val,
+                    "指派案場": site_val,
+                    "班段": shifts_combined.replace('<br>', ' / '),
+                    "時間區間": intervals_combined.replace('<br>', ' / '),
+                    "擔任職位": roles_combined.replace('<br>', ' / ')
+                })
+                
+                grouped_rows_html += f"""
                 <tr>
-                    <td style='text-align:center; padding:8px; border:1px solid #000;'>{r['日期']}</td>
-                    <td style='padding:8px; border:1px solid #000;'>{r['案場名稱']}</td>
-                    <td style='text-align:center; padding:8px; border:1px solid #000;'>{r['班段名稱']}</td>
-                    <td style='text-align:center; padding:8px; border:1px solid #000;'>{r['時段區間']}</td>
-                    <td style='padding:8px; border:1px solid #000; font-weight:bold;'>{r['派駐職位']}</td>
+                    <td style='text-align:center; padding:10px; border:1px solid #000; vertical-align:middle;'>{date_val}</td>
+                    <td style='padding:10px; border:1px solid #000; vertical-align:middle;'>{site_val}</td>
+                    <td style='text-align:center; padding:10px; border:1px solid #000; vertical-align:middle;'>{shifts_combined}</td>
+                    <td style='text-align:center; padding:10px; border:1px solid #000; vertical-align:middle;'>{intervals_combined}</td>
+                    <td style='padding:10px; border:1px solid #000; font-weight:bold; vertical-align:middle;'>{roles_combined}</td>
                 </tr>
                 """
-                
+            
+            # 呈現精簡後的一天一列資料網格給同仁看
+            st.success(f"📋 已成功將【{target_emp}】當月排班精簡優化為「一天一列」明細：")
+            st.dataframe(pd.DataFrame(preview_list), use_container_width=True, hide_index=True)
+            
+            # 🌟 內嵌 LOGO 商標與一天一列完美合併的 PDF 高階列印架構
+            logo_tag = get_logo_html_tag()
             emp_html_doc = f"""
-            <div style='font-family:"Microsoft JhengHei", sans-serif; padding:15px; background:#fff; color:#000;'>
-                <h3 style='text-align:center; margin-bottom:5px;'>{COMPANY_NAME}</h3>
+            <div style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:15px; background:#fff; color:#000;'>
+                {logo_tag}
+                <h3 style='text-align:center; margin-bottom:5px; margin-top:5px;'>{COMPANY_NAME}</h3>
                 <h4 style='text-align:center; margin-top:0; margin-bottom:15px;'>同仁【{target_emp}】{q_year}年{q_month:02d}月份 個人出勤直式明細表</h4>
-                <table style='width:100%; border-collapse:collapse;'>
+                <table style='width:100%; border-collapse:collapse; background:#fff;'>
                     <thead>
                         <tr style='background-color:#f5f5f5;'>
-                            <th style='border:1px solid #000; padding:8px;'>出勤日期</th>
-                            <th style='border:1px solid #000; padding:8px;'>指派案場</th>
-                            <th style='border:1px solid #000; padding:8px;'>班段</th>
-                            <th style='border:1px solid #000; padding:8px;'>時間區間</th>
-                            <th style='border:1px solid #000; padding:8px;'>擔任職位</th>
+                            <th style='border:1px solid #000; padding:10px; width:15%;'>出勤日期</th>
+                            <th style='border:1px solid #000; padding:10px; width:25%;'>指派案場</th>
+                            <th style='border:1px solid #000; padding:10px; width:20%;'>班段</th>
+                            <th style='border:1px solid #000; padding:10px; width:25%;'>時間區間</th>
+                            <th style='border:1px solid #000; padding:10px; width:15%;'>擔任職位</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {html_emp_rows}
+                        {grouped_rows_html}
                     </tbody>
                 </table>
             </div>
@@ -363,8 +394,8 @@ elif "個人班表出勤直式查詢" in page_clean:
             </div>
             """
             st.markdown("---")
-            st.subheader("📄 直式班表 PDF 印製與導出預覽區")
-            st.components.v1.html(emp_html_doc, height=500, scrolling=True)
+            st.subheader("📄 直式班表 PDF 印製與導出預覽區 (內含公司 LOGO Mark)")
+            st.components.v1.html(emp_html_doc, height=520, scrolling=True)
         else:
             st.info(f"ℹ️ 雲端資料庫中目前尚無【{target_emp}】在 {q_year} 年 {q_month} 月的出勤記錄。")
     else:
