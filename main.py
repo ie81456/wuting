@@ -5,17 +5,8 @@ import os
 import json
 import io
 import re
-import urllib.request
 from google.oauth2.service_account import Credentials
 import gspread
-
-# PDF 專用套件
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, portrait
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.cidfonts import CIDFont
 
 st.set_page_config(page_title="魔力休閒運動事業股份有限公司 - 專業勤務排班系統", layout="wide")
 
@@ -35,18 +26,6 @@ REMARKS_FILE = 'remarks.json'
 COMPANY_NAME = "魔力休閒運動事業股份有限公司"
 
 JOB_ROLES = ["會館主任", "救生員", "男湯人員", "女湯人員", "物業人員", "代班人員"]
-
-# 🌟 內置字型註冊，直接使用 ReportLab 自帶的東亞標準字型，免去上傳大字型檔與當機煩惱
-def init_pdf_font():
-    try:
-        pdfmetrics.registerFont(CIDFont('MHei-Medium', 'UniCNS-UTF16-H'))
-        return 'MHei-Medium'
-    except:
-        try:
-            pdfmetrics.registerFont(CIDFont('STHeiti-Light', 'UniCNS-UTF16-H'))
-            return 'STHeiti-Light'
-        except:
-            return 'Helvetica'
 
 def load_remarks():
     if os.path.exists(REMARKS_FILE):
@@ -70,7 +49,7 @@ def clean_date_string(d_str):
         return f"{int(match_ad.group(1))}-{int(match_ad.group(2)):02d}-{int(match_ad.group(3)):02d}"
     return s
 
-def init_gspread_system(*args, **kwargs):
+def init_gspread_system():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     if "gcp_service_account" in st.secrets:
         try:
@@ -139,33 +118,39 @@ if 'data_loaded' not in st.session_state:
         st.session_state.sites_db = load_cloud_data('sites', ['案場名稱', '案場地址', '案場性質', '案場聯絡人姓名', '案場聯絡人電話', '時段一_上', '時段一_下', '時段二_上', '時段二_下', '時段三_上', '時段三_下', '注意事項'])
         st.session_state.leave_requests_db = load_cloud_data('leave_requests', ['日期', '案場名稱', '員工姓名', '請假時段', '假別性質'])
         st.session_state.schedule_db = load_cloud_data('schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
-        st.session_state.site_types = ["辦公大樓", "購物中心", "展覽館", "工廠園區", "其他"]
         st.session_state.data_loaded = True
 
-if 'w_clear_key' not in st.session_state: st.session_state.w_clear_key = 0
-if 's_clear_key' not in st.session_state: st.session_state.s_clear_key = 0
-
-# 🌟 核心修復 1：重新補上全域核心時間計算邏輯，徹底解決 default_next_month 遺失問題
 today = datetime.date.today()
 first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
 default_next_year = first_day_of_next_month.year
 default_next_month = first_day_of_next_month.month
+
+# 🌟 核心升級 3：員工名冊依據「員工編號」轉換、補零排序、產生格式化名單選單
+worker_options = []
+if not st.session_state.workers_db.empty:
+    w_df = st.session_state.workers_db.copy()
+    # 智慧排序防線：將編號轉成數字或格式化補零進行排序，避免 10 排在 2 前面
+    w_df['sort_id'] = pd.to_numeric(w_df['員工編號'], errors='coerce').fillna(999)
+    w_df = w_df.sort_values(by='sort_id').reset_index(drop=True)
+    st.session_state.workers_db = w_df.drop(columns=['sort_id'])
+    
+    for idx, r in st.session_state.workers_db.iterrows():
+        worker_options.append(f"[{str(r['員工編號']).strip()}] {str(r['姓名']).strip()}")
 
 # 🔐 系統管理大廳 (登入密碼 680817)
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, use_container_width=True)
         st.markdown(f"<h2 style='text-align: center;'>{COMPANY_NAME}<br>專業勤務排班系統</h2>", unsafe_allow_html=True)
         st.markdown("---")
         
-        tab_emp, tab_admin = st.tabs(["👥 員工專專區登入", "👑 系統管理者登入"])
+        tab_emp, tab_admin = st.tabs(["👥 員工專區登入", "👑 系統管理者登入"])
         with tab_emp:
-            emp_names = st.session_state.workers_db['姓名'].tolist() if not st.session_state.workers_db.empty else []
-            if emp_names:
-                login_name = st.selectbox("請選擇您的姓名", emp_names)
-                login_pwd = st.text_input("請輸入登入密碼", type="password")
+            if worker_options:
+                login_select = st.selectbox("請選擇您的員工編號與姓名", worker_options)
+                login_name = login_select.split("] ")[1].strip() if "] " in login_select else login_select
+                login_pwd = st.text_input("請輸入登入密碼", type="password", key="emp_pwd_input")
                 if st.button("🚪 驗證並登入", use_container_width=True, type="primary"):
                     worker_row = st.session_state.workers_db[st.session_state.workers_db['姓名'] == login_name].iloc[0]
                     valid_pwd = str(worker_row.get('登入密碼', '')).strip() if str(worker_row.get('登入密碼', '')).strip() else str(worker_row.get('行動電話', '')).strip()
@@ -176,10 +161,9 @@ if not st.session_state.logged_in:
                         st.rerun()
                     else: st.error("❌ 密碼錯誤！")
         with tab_admin:
-            ADMIN_PASSWORD = "680817"
-            admin_pwd = st.text_input("請輸入最高管理者密碼", type="password")
+            admin_pwd = st.text_input("請輸入最高管理者密碼", type="password", key="admin_pwd_input")
             if st.button("👑 管理者登入", use_container_width=True, type="primary"):
-                if admin_pwd == ADMIN_PASSWORD:
+                if admin_pwd == "680817":
                     st.session_state.logged_in = True
                     st.session_state.user_role = "admin"
                     st.session_state.current_user_name = "系統管理者"
@@ -187,14 +171,12 @@ if not st.session_state.logged_in:
                 else: st.error("❌ 密碼錯誤！")
     st.stop()
 
-# 側邊導覽選單定義
 is_admin = (st.session_state.user_role == "admin")
 if is_admin:
     menu_options = ["工作者基本資料設定", "案場基本資料設定", "🗓️ 管理者控制台：填報排休與手工修改", "🚀 管理者控制台：自動鋪底稿與微調", "📊 班表大印製中心：正式 PDF 產出", "📱 員工專區：個人班表出勤直式查詢"]
 else:
     menu_options = ["🗓️ 員工專區：線上登記請假排休", "📱 員工專區：個人班表出勤直式查詢", "🔐 員工專區：修改個人登入密碼"]
 
-# 🌟 核心修復 2：將選單名稱與分流字串徹底修剪前後空白並對齊，100% 復活直式查詢畫面
 page = st.sidebar.radio("請選擇功能頁面：", menu_options)
 page_clean = page.strip()
 
@@ -206,27 +188,22 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     st.session_state.logged_in = False
     st.rerun()
 
-# ==========================================
-# 各功能頁面安全分流邏輯
-# ==========================================
+# 各基本資料頁面
 if "工作者基本資料設定" in page_clean:
-    st.title("⚙️ 工作者基本資料設定")
-    st.dataframe(st.session_state.workers_db, use_container_width=True)
-
+    st.title("⚙️ 工作者基本資料設定 (已依員工編號排序)")
+    st.dataframe(st.session_state.workers_db, use_container_width=True, hide_index=True)
 elif "案場基本資料設定" in page_clean:
     st.title("🏢 案場基本資料設定")
-    st.dataframe(st.session_state.sites_db, use_container_width=True)
-
+    st.dataframe(st.session_state.sites_db, use_container_width=True, hide_index=True)
 elif "填報排休" in page_clean or "線上登記請假排休" in page_clean:
     st.title("🗓️ 線上填報排休與手工修改")
-    st.dataframe(st.session_state.leave_requests_db, use_container_width=True)
-
+    st.dataframe(st.session_state.leave_requests_db, use_container_width=True, hide_index=True)
 elif "自動鋪底稿" in page_clean:
     st.title("🚀 自動週期底稿鋪設與職位精準抽換控制台")
-    st.dataframe(st.session_state.schedule_db, use_container_width=True)
+    st.dataframe(st.session_state.schedule_db, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 📊 正式印製中心 (變數全面綁定完畢)
+# 📊 正式印製中心 (網頁高解析列印引擎修正)
 # ==========================================
 elif "班表大印製中心" in page_clean:
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
@@ -279,49 +256,66 @@ elif "班表大印製中心" in page_clean:
         save_remarks(remarks_db)
         st.success("✅ 備註資料已成功儲存！")
         
-    if st.button("📥 一鍵產生並下載 PDF 班表", type="primary"):
-        try:
-            font_to_use = init_pdf_font()
-            buffer = io.BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=20, leftMargin=20, topMargin=40, bottomMargin=40)
-            elements = []
-            
-            title_style = ParagraphStyle(name='TitleStyle', fontName=font_to_use, fontSize=15, spaceAfter=20, leading=20)
-            elements.append(Paragraph(f"<b>{COMPANY_NAME}</b><br/>{sel_site} {sel_month:02d}月班表", title_style))
-            elements.append(Spacer(1, 10))
-            
-            cell_style = ParagraphStyle(name='CellStyle', fontName=font_to_use, fontSize=9, leading=13, alignment=1)
-            header_style = ParagraphStyle(name='HeaderStyle', fontName=font_to_use, fontSize=10, alignment=1)
-            
-            data = [[Paragraph(f"<b>{c}</b>", header_style) for c in edited_df.columns]]
-            for row in edited_df.values.tolist(): 
-                data.append([Paragraph(str(cell).replace('\n', '<br/>'), cell_style) for cell in row])
-            
-            t = Table(data, colWidths=[30, 110, 30, 270, 115], repeatRows=1)
-            t.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
-            elements.append(t)
-            
-            doc.build(elements)
-            st.download_button(label="⬇️ 點擊下載正式 PDF 班表", data=buffer.getvalue(), file_name=f"{sel_site}_{sel_month:02d}月_正式班表.pdf", mime="application/pdf")
-            st.success("🎉 PDF 班表產生成功！")
-        except Exception as e: st.error(f"❌ PDF 錯誤：{str(e)}")
+    # 🌟 革命升級：直接產生 100% 不缺字的標準前端列印網頁
+    html_table_rows = ""
+    for r in edited_df.to_dict(orient='records'):
+        html_table_rows += f"""
+        <tr>
+            <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['日期']}</td>
+            <td style='padding:6px; border:1px solid #000; color:red;'>{r['休假']}</td>
+            <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['星期']}</td>
+            <td style='padding:6px; border:1px solid #000; font-weight:bold;'>{r['班別 / 勤務人員']}</td>
+            <td style='padding:6px; border:1px solid #000;'>{r['備註']}</td>
+        </tr>
+        """
+        
+    full_html_document = f"""
+    <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:20px; background:#fff; color:#000;'>
+        <h2 style='text-align:center; margin-bottom:5px;'>{COMPANY_NAME}</h2>
+        <h3 style='text-align:center; margin-top:0; margin-bottom:20px;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
+        <table style='width:100%; border-collapse:collapse; background:#fff;'>
+            <thead>
+                <tr style='background-color:#f2f2f2;'>
+                    <th style='width:6%; border:1px solid #000; padding:8px;'>日期</th>
+                    <th style='width:22%; border:1px solid #000; padding:8px;'>休假</th>
+                    <th style='width:6%; border:1px solid #000; padding:8px;'>星期</th>
+                    <th style='width:46%; border:1px solid #000; padding:8px;'>班別 / 勤務人員</th>
+                    <th style='width:20%; border:1px solid #000; padding:8px;'>備註</th>
+                </tr>
+            </thead>
+            <tbody>
+                {html_table_rows}
+            </tbody>
+        </table>
+    </div>
+    <div style='text-align:center; margin-top:20px;'>
+        <button onclick='window.print();' style='padding:12px 30px; font-size:16px; font-weight:bold; background-color:#1E88E5; color:white; border:none; border-radius:5px; cursor:pointer;'>🖨️ 點擊啟動 PDF 列印與儲存中心</button>
+    </div>
+    """
+    st.markdown("---")
+    st.subheader("📋 預覽正式發佈班表 (下方按鈕可直接另存為 PDF，永不缺字)")
+    st.components.v1.html(full_html_document, height=650, scrolling=True)
 
 # ==========================================
-# 📱 員工個人出勤查詢專區 (最完整的安全復活)
+# 📱 員工個人出勤直式查詢 (PDF 產出全面回歸)
 # ==========================================
 elif "個人班表出勤直式查詢" in page_clean:
-    st.title("📱 員工個人出勤班表直式查詢")
+    st.title("📱 員工個人出勤班表直式查詢與 PDF 產出")
     
-    # 智慧識別當前登入者姓名
     current_worker = st.session_state.current_user_name if st.session_state.current_user_name else "系統管理者"
-    target_emp = st.selectbox("請選擇或核對欲查詢的員工姓名：", list(set(st.session_state.workers_db['姓名'].tolist() + [current_worker])), index=0)
     
+    # 🌟 核心升級：這裡的下拉選單同步套用「[工號] 姓名」且排序過的格式
+    if worker_options:
+        selected_emp_format = st.selectbox("請核對或選擇欲查詢的員工工號及姓名：", worker_options)
+        target_emp = selected_emp_format.split("] ")[1].strip() if "] " in selected_emp_format else selected_emp_format
+    else:
+        target_emp = st.text_input("輸入查詢員工姓名：", value=current_worker)
+        
     q_year = st.selectbox("選擇查詢年份：", [2026, 2027], index=0)
     q_month = st.selectbox("選擇查詢月份：", list(range(1, 13)), index=default_next_month - 1)
     
     s_db = st.session_state.schedule_db.copy()
     
-    # 過濾出該員工當月的所有出勤排班記錄
     if not s_db.empty:
         s_db['Month_Int'] = s_db['日期'].apply(lambda x: int(x.split('-')[1]) if '-' in str(x) else 0)
         s_db['Year_Int'] = s_db['日期'].apply(lambda x: int(x.split('-')[0]) if '-' in str(x) else 0)
@@ -329,13 +323,52 @@ elif "個人班表出勤直式查詢" in page_clean:
         emp_records = s_db[(s_db['員工姓名'].str.strip() == target_emp.strip()) & (s_db['Year_Int'] == q_year) & (s_db['Month_Int'] == q_month)]
         
         if not emp_records.empty:
-            st.success(f"📋 找到【{target_emp}】在 {q_year} 年 {q_month} 月的直式勤務明細：")
-            display_df = emp_records[['日期', '案場名稱', '班段名稱', '時段區間', '派駐職位']].sort_values(by='日期').reset_index(drop=True)
-            st.dataframe(display_df, use_container_width=True)
+            sorted_records = emp_records[['日期', '案場名稱', '班段名稱', '時段區間', '派駐職位']].sort_values(by='日期').reset_index(drop=True)
+            st.dataframe(sorted_records, use_container_width=True, hide_index=True)
+            
+            # 🌟 核心復活：利用網頁高階列印引擎，一鍵將個人的直式勤務表導出成 PDF！
+            html_emp_rows = ""
+            for r in sorted_records.to_dict(orient='records'):
+                html_emp_rows += f"""
+                <tr>
+                    <td style='text-align:center; padding:8px; border:1px solid #000;'>{r['日期']}</td>
+                    <td style='padding:8px; border:1px solid #000;'>{r['案場名稱']}</td>
+                    <td style='text-align:center; padding:8px; border:1px solid #000;'>{r['班段名稱']}</td>
+                    <td style='text-align:center; padding:8px; border:1px solid #000;'>{r['時段區間']}</td>
+                    <td style='padding:8px; border:1px solid #000; font-weight:bold;'>{r['派駐職位']}</td>
+                </tr>
+                """
+                
+            emp_html_doc = f"""
+            <div style='font-family:"Microsoft JhengHei", sans-serif; padding:15px; background:#fff; color:#000;'>
+                <h3 style='text-align:center; margin-bottom:5px;'>{COMPANY_NAME}</h3>
+                <h4 style='text-align:center; margin-top:0; margin-bottom:15px;'>同仁【{target_emp}】{q_year}年{q_month:02d}月份 個人出勤直式明細表</h4>
+                <table style='width:100%; border-collapse:collapse;'>
+                    <thead>
+                        <tr style='background-color:#f5f5f5;'>
+                            <th style='border:1px solid #000; padding:8px;'>出勤日期</th>
+                            <th style='border:1px solid #000; padding:8px;'>指派案場</th>
+                            <th style='border:1px solid #000; padding:8px;'>班段</th>
+                            <th style='border:1px solid #000; padding:8px;'>時間區間</th>
+                            <th style='border:1px solid #000; padding:8px;'>擔任職位</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {html_emp_rows}
+                    </tbody>
+                </table>
+            </div>
+            <div style='text-align:center; margin-top:15px;'>
+                <button onclick='window.print();' style='padding:10px 25px; font-size:14px; font-weight:bold; background-color:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer;'>🖨️ 導出/列印個人直式班表 PDF</button>
+            </div>
+            """
+            st.markdown("---")
+            st.subheader("📄 直式班表 PDF 印製與導出預覽區")
+            st.components.v1.html(emp_html_doc, height=500, scrolling=True)
         else:
-            st.info(f"ℹ️ 雲端資料庫中目前尚無【{target_emp}】在 {q_year} 年 {q_month} 月的排班記錄。")
+            st.info(f"ℹ️ 雲端資料庫中目前尚無【{target_emp}】在 {q_year} 年 {q_month} 月的出勤記錄。")
     else:
-        st.warning("⚠️ 目前總排班資料庫為空，請由控制台先進行鋪設底稿。")
+        st.warning("⚠️ 排班資料庫為空。")
 
 else:
     st.title("🔐 員工線上密碼變更自主中心")
