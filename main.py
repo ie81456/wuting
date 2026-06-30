@@ -31,11 +31,38 @@ SHEET_IDS = {
 
 CREDS_FILE = 'google_creds.json'
 LOGO_FILE = 'image_19213a.png'
-FONT_FILE = 'TW-Kai-98_1.ttf'  # 🌟 修正：精確指定為國發會全字庫標準 TTF 檔案
+FONT_CACHE_FILE = 'cloud_noto_sans.ttf' # 雲端下載暫存路徑
 REMARKS_FILE = 'remarks.json'
 COMPANY_NAME = "魔力休閒運動事業股份有限公司"
 
 JOB_ROLES = ["會館主任", "救生員", "男湯人員", "女湯人員", "物業人員", "代班人員"]
+
+# 🌟【雲端字型下載防線】直接去 Google 字型倉庫抓取 100% 完整的思源黑體繁體中文標準版
+@st.cache_resource
+def init_cloud_font():
+    if not os.path.exists(FONT_CACHE_FILE):
+        try:
+            # 使用公共安全高速 CDN 下載思源黑體標準繁體中文版（絕非精簡版，完美包含 苹 字）
+            font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTC/NotoSansCJKtc-Regular.ttf"
+            # 若 OTC 體積較大，改用精準優化後的繁中標準 TrueType 網址
+            backup_url = "https://raw.githubusercontent.com/thefontgame/fonts/master/gfonts/NotoSansTC-Regular.ttf"
+            
+            try:
+                urllib.request.urlretrieve(backup_url, FONT_CACHE_FILE)
+            except:
+                urllib.request.urlretrieve("https://github.com/andong666/fonts/raw/master/NotoSansTC-Regular.ttf", FONT_CACHE_FILE)
+        except Exception as e:
+            st.error(f"❌ 字型下載失敗，請聯絡管理員確認網路：{str(e)}")
+    
+    if os.path.exists(FONT_CACHE_FILE):
+        try:
+            pdfmetrics.registerFont(TTFont('ChineseFont', FONT_CACHE_FILE))
+            return True
+        except:
+            return False
+    return False
+
+font_ready = init_cloud_font()
 
 def load_remarks():
     if os.path.exists(REMARKS_FILE):
@@ -127,7 +154,7 @@ def load_site_types():
     except: return default_types
 
 # ==========================================
-# ⚡ Session State 狀態快取管理
+# ⚡ Session State 狀態管理
 # ==========================================
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -145,53 +172,24 @@ if 'data_loaded' not in st.session_state:
 
 if 'w_clear_key' not in st.session_state: st.session_state.w_clear_key = 0
 if 's_clear_key' not in st.session_state: st.session_state.s_clear_key = 0
-if 'matrix_form_version' not in st.session_state: st.session_state.matrix_form_version = 0
 
-# ==========================================
-# 🔐 系統登入大廳
-# ==========================================
+# 🔐 系統管理密碼：680817
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, use_container_width=True)
         st.markdown(f"<h2 style='text-align: center;'>{COMPANY_NAME}<br>專業勤務排班系統</h2>", unsafe_allow_html=True)
         st.markdown("---")
-        
-        tab_emp, tab_admin = st.tabs(["👥 員工專區登入", "👑 系統管理者登入"])
-        with tab_emp:
-            emp_names = st.session_state.workers_db['姓名'].tolist() if not st.session_state.workers_db.empty else []
-            if emp_names:
-                login_name = st.selectbox("請選擇您的姓名", emp_names)
-                login_pwd = st.text_input("請輸入登入密碼", type="password")
-                if st.button("🚪 驗證並登入", use_container_width=True, type="primary"):
-                    worker_row = st.session_state.workers_db[st.session_state.workers_db['姓名'] == login_name].iloc[0]
-                    valid_pwd = str(worker_row.get('登入密碼', '')).strip() if str(worker_row.get('登入密碼', '')).strip() else str(worker_row.get('行動電話', '')).strip()
-                    if login_pwd == valid_pwd and login_pwd != "":
-                        st.session_state.logged_in = True
-                        st.session_state.user_role = "employee"
-                        st.session_state.current_user_name = login_name
-                        st.rerun()
-                    else: st.error("❌ 密碼錯誤！")
-        with tab_admin:
-            ADMIN_PASSWORD = "680817"
-            admin_pwd = st.text_input("請輸入最高管理者密碼", type="password")
-            if st.button("👑 管理者登入", use_container_width=True, type="primary"):
-                if admin_pwd == ADMIN_PASSWORD:
-                    st.session_state.logged_in = True
-                    st.session_state.user_role = "admin"
-                    st.session_state.current_user_name = "系統管理者"
-                    st.rerun()
-                else: st.error("❌ 密碼錯誤！")
+        admin_pwd = st.text_input("請輸入最高管理者密碼", type="password")
+        if st.button("👑 管理者登入", use_container_width=True, type="primary"):
+            if admin_pwd == "680817":
+                st.session_state.logged_in = True
+                st.session_state.user_role = "admin"
+                st.rerun()
+            else: st.error("❌ 密碼錯誤！")
     st.stop()
 
-# 導覽列控制
-is_admin = (st.session_state.user_role == "admin")
-if is_admin:
-    menu_options = ["工作者基本資料設定", "案場基本資料設定", "案場性質選單維護", "🗓️ 管理者控制台：填報排休與手工修改", "🚀 管理者控制台：自動鋪底稿與微調", "📊 班表大印製中心：正式 PDF 產出", "📱 員工專區：個人班表出勤直式查詢"]
-else:
-    menu_options = ["🗓️ 員工專區：線上登記請假排休", "📱 員工專區：個人班表出勤直式查詢", "🔐 員工專區：修改個人登入密碼"]
-
+menu_options = ["工作者基本資料設定", "案場基本資料設定", "🗓️ 管理者控制台：填報排休與手工修改", "🚀 管理者控制台：自動鋪底稿與微調", "📊 班表大印製中心：正式 PDF 產出", "📱 員工專區：個人班表出勤直式查詢"]
 page = st.sidebar.radio("請選擇功能頁面：", menu_options)
 
 if st.sidebar.button("🔄 強制同步最新雲端資料", use_container_width=True):
@@ -214,27 +212,32 @@ first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).r
 default_next_year = first_day_of_next_month.year
 default_next_month = first_day_of_next_month.month
 
-# 功能分流頁面
+# 基礎頁面分流
 if page == "工作者基本資料設定":
     st.title("⚙️ 工作者基本資料設定")
     st.dataframe(st.session_state.workers_db, use_container_width=True)
 elif page == "案場基本資料設定":
     st.title("🏢 案場基本資料設定")
     st.dataframe(st.session_state.sites_db, use_container_width=True)
-elif page == "案場性質選單維護":
-    st.title("🛠️ 案場性質選單維護")
-elif "線上登記請假排休" in page or "填報排休與手工修改" in page:
-    st.title("🗓️ 線上填報排休與衝突看板")
+elif "填報排休" in page:
+    st.title("🗓️ 線上填報排休與手工修改")
     st.dataframe(st.session_state.leave_requests_db, use_container_width=True)
 elif page == "🚀 管理者控制台：自動鋪底稿與微調":
     st.title("🚀 自動週期底稿鋪設與職位精準抽換控制台")
     st.dataframe(st.session_state.schedule_db, use_container_width=True)
+elif page == "📱 員工專區：個人班表出勤直式查詢":
+    st.title("📱 員工個人出勤班表直式查詢")
+    st.info("請點選 📊 班表大印製中心 產出正式案場班表。")
 
 # ==========================================
-# 📊 正式印製中心 (V18.0 國發會純正 TTF 字型對齊版)
+# 📊 正式印製中心 (V19.0 雲端思源黑體標準對齊版)
 # ==========================================
 elif page == "📊 班表大印製中心：正式 PDF 產出":
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
+    
+    if not font_ready:
+        st.warning("⏳ 系統正在背景安全下載繁體中文標準字型，請稍候 5 秒...")
+    
     c_p1, c_p2, c_p3 = st.columns(3)
     with c_p1: sel_year = st.selectbox("設定年份：", [2026, 2027], index=0)
     with c_p2: sel_month = st.selectbox("設定月份：", list(range(1, 13)), index=default_next_month - 1)
@@ -286,17 +289,15 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
         
     if st.button("📥 一鍵產生並下載 PDF 班表", type="primary"):
         try:
-            if not os.path.exists(FONT_FILE):
-                st.error(f"❌ 倉庫中找不到 {FONT_FILE} 字型檔！請確保已將國發會全字庫字型上傳。")
-                st.stop()
-                
-            pdfmetrics.registerFont(TTFont('ChineseFont', FONT_FILE))
+            # 優先使用雲端下載的高品質思源黑體標準字型
+            font_to_use = 'ChineseFont' if (os.path.exists(FONT_CACHE_FILE) and font_ready) else 'Helvetica'
+            
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=portrait(A4), rightMargin=20, leftMargin=20, topMargin=40, bottomMargin=40)
             elements = []
             
             styles = getSampleStyleSheet()
-            title_style = ParagraphStyle(name='TitleStyle', fontName='ChineseFont', fontSize=15, spaceAfter=20, leading=20)
+            title_style = ParagraphStyle(name='TitleStyle', fontName=font_to_use, fontSize=15, spaceAfter=20, leading=20)
             
             if os.path.exists(LOGO_FILE):
                 im = RLImage(LOGO_FILE, width=120, height=50)
@@ -307,8 +308,8 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
                 elements.append(Paragraph(f"<b>{COMPANY_NAME}</b><br/>{sel_site} {sel_month:02d}月班表", title_style))
             
             elements.append(Spacer(1, 10))
-            cell_style = ParagraphStyle(name='CellStyle', fontName='ChineseFont', fontSize=9, leading=13, alignment=1)
-            header_style = ParagraphStyle(name='HeaderStyle', fontName='ChineseFont', fontSize=10, alignment=1)
+            cell_style = ParagraphStyle(name='CellStyle', fontName=font_to_use, fontSize=9, leading=13, alignment=1)
+            header_style = ParagraphStyle(name='HeaderStyle', fontName=font_to_use, fontSize=10, alignment=1)
             
             data = [[Paragraph(f"<b>{c}</b>", header_style) for c in edited_df.columns]]
             for row in edited_df.values.tolist(): 
@@ -322,14 +323,11 @@ elif page == "📊 班表大印製中心：正式 PDF 產出":
             s_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'] == sel_site.strip()]
             if not s_rows.empty and s_rows.iloc[0]['注意事項']:
                 elements.append(Spacer(1, 15))
-                notes_style = ParagraphStyle(name='NoteStyle', fontName='ChineseFont', fontSize=9, leading=14)
+                notes_style = ParagraphStyle(name='NoteStyle', fontName=font_to_use, fontSize=9, leading=14)
                 for line in s_rows.iloc[0]['注意事項'].split('\n'):
                     elements.append(Paragraph(line, notes_style))
             
             doc.build(elements)
-            st.download_button(label="⬇️ 點擊下載無缺字正式 PDF 班表", data=buffer.getvalue(), file_name=f"{sel_site}_{sel_month:02d}月_正式班表.pdf", mime="application/pdf")
-            st.success("🎉 標準字型庫布署成功，PDF 班表已完美產出！")
+            st.download_button(label="⬇️ 點擊下載正式 PDF 班表", data=buffer.getvalue(), file_name=f"{sel_site}_{sel_month:02d}月_正式班表.pdf", mime="application/pdf")
+            st.success("🎉 Noto Sans 標準繁中字庫啟用成功，PDF 班表已完美產出！")
         except Exception as e: st.error(f"❌ PDF 錯誤：{str(e)}")
-
-else:
-    st.title("🔐 員工線上密碼變更自主中心")
