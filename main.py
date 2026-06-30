@@ -171,7 +171,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ==========================================
-# 📍 系統選單切換
+# 📍 系統選單
 # ==========================================
 is_admin = (st.session_state.user_role == "admin")
 if is_admin:
@@ -282,12 +282,10 @@ elif "案場基本資料設定" in page_clean:
     st.dataframe(st.session_state.sites_db, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 🗓️ 3. 線上填報排休與手工修改 (🌟 完美即時連動修正)
+# 🗓️ 3. 線上填報排休與手工修改 (即時過濾連動)
 # ==========================================
 elif "線上填報排休" in page_clean:
     st.title("🗓️ 線上填報排休與手工修改")
-    
-    # 🌟 修正點 1：將選擇案場與日期的控制項移至表單外部，確保每次變動時右側表格能 100% 觸發完全即時連動過濾
     col_entry, col_view = st.columns([1, 1.5])
     
     with col_entry:
@@ -308,7 +306,6 @@ elif "線上填報排休" in page_clean:
                 st.rerun()
                 
     with col_view:
-        # 🌟 完美同步：右側表格強制跟隨左側案場及點選的日期月份，毫無秒差即時連動過濾
         target_ym = select_date.strftime('%Y-%m')
         st.subheader(f"📋 【{select_site}】{target_ym} 月份排休即時清單")
         st.write("💡 提示：雙擊儲存格直接修改，勾選最左側可進行整列增刪，完成後請按「儲存排休表單修改」。")
@@ -327,11 +324,11 @@ elif "線上填報排休" in page_clean:
             st.rerun()
 
 # ==========================================
-# 🚀 4. 自動週期底稿鋪設與修改 (🌟 下拉選單滑鼠點選防呆)
+# 🚀 4. 自動週期底稿鋪設與修改 (🌟 增加大批修正功能)
 # ==========================================
 elif "自動週期底稿鋪設" in page_clean:
-    st.title("🚀 自動週期底稿鋪設與排班微調控制台")
-    tab_auto, tab_manual = st.tabs(["📅 引擎自動鋪底稿", "🛠️ 班表查詢與手工微調 (抽換修改)"])
+    st.title("🚀 自動週期底稿鋪設與班表修改控制台")
+    tab_auto, tab_manual = st.tabs(["📅 引擎自動鋪底稿", "🛠️ 班表查詢與手工微調 (含大批修正)"])
     
     with tab_auto:
         st.subheader("🚀 批次週期底稿引擎鋪設")
@@ -392,30 +389,62 @@ elif "自動週期底稿鋪設" in page_clean:
                 st.rerun()
 
     with tab_manual:
-        # 🌟 修正點 2：手工微調模組完全改成滑鼠點選（年份下拉選單 + 月份下拉選單），完全杜絕打錯字
         st.subheader("🛠️ 班表特定月份精準手工修改與微調")
-        st.write("說明：請使用滑鼠點選案場、年份及月份，下方表格支援連點兩下直接修改，或按表格下方 ➕ 新增列，或點擊最左側整列按 Delete 刪除。")
         col_q1, col_q2, col_q3 = st.columns(3)
         with col_q1: q_site = st.selectbox("指定微調案場：", st.session_state.sites_db['案場名稱'].tolist() if not st.session_state.sites_db.empty else ["大同莊園"], key="man_site")
         with col_q2: q_year = st.selectbox("指定微調年份：", [2026, 2027], index=0, key="man_year")
         with col_q3: q_month = st.selectbox("指定微調月份：", list(range(1, 13)), index=today.month-1, key="man_month")
         
         target_q_ym = f"{q_year}-{q_month:02d}"
+        
+        # 🌟 核心增強：加入「大批修正面板」，一鍵替換整個月的班表同仁，免一筆一筆點
+        st.markdown("---")
+        with st.expander("🚀 🔥 展開「大批修正 / 快速抽換人員」控制面板", expanded=True):
+            st.write("您可以設定條件，快速將該案場本月的所有指定同仁、職位一併替換，完全不用一筆一筆點！")
+            c_mod1, c_mod2, c_mod3 = st.columns(3)
+            with c_mod1: orig_worker = st.selectbox("🔍 條件：原班表上的員工", ["(不限全選)"] + st.session_state.workers_db['姓名'].tolist(), key="orig_w")
+            with c_mod2: new_worker = st.selectbox("🎯 替換為：新指派的員工", st.session_state.workers_db['姓名'].tolist(), key="new_w")
+            with c_mod3: target_role = st.selectbox("👔 統一變更職位為", ["(保持原樣)"] + JOB_ROLES, key="t_role")
+            
+            if st.button("⚡ 執行大批次蓋印/修正抽換", type="primary", use_container_width=True):
+                s_db_all = st.session_state.schedule_db.copy()
+                mask_month_site = (s_db_all['日期'].str.startswith(target_q_ym)) & (s_db_all['案場名稱'].str.strip() == q_site.strip())
+                
+                if not s_db_all[mask_month_site].empty:
+                    batch_count = 0
+                    for idx, row in s_db_all[mask_month_site].iterrows():
+                        # 比對原員工
+                        if orig_worker == "(不限全選)" or str(row['員工姓名']).strip() == orig_worker.strip():
+                            s_db_all.at[idx, '員工姓名'] = new_worker.strip()
+                            if target_role != "(保持原樣)":
+                                s_db_all.at[idx, '派駐職位'] = target_role
+                            batch_count += 1
+                    
+                    if batch_count > 0:
+                        st.session_state.schedule_db = s_db_all
+                        save_cloud_data(st.session_state.schedule_db, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
+                        st.success(f"🎉 報告峰哥！已成功幫您「大批修正」抽換了共 {batch_count} 筆班表紀錄！")
+                        st.rerun()
+                    else: st.warning("找不到符合過濾條件的員工紀錄。")
+                else: st.warning("本月份該案場尚無底稿排班紀錄。")
+
+        st.markdown("---")
+        st.write("💡 下方為該案場當月明細表，您依然可以進行個別儲存格連點微調，或在最下方 ➕ 新增列。")
         s_db = st.session_state.schedule_db.copy()
         mask_s = (s_db['日期'].str.startswith(target_q_ym)) & (s_db['案場名稱'].str.strip() == q_site.strip())
         filtered_s_df = s_db[mask_s]
         
         edited_s_df = st.data_editor(filtered_s_df, num_rows="dynamic", use_container_width=True, hide_index=True, key="manual_schedule_editor")
-        if st.button("💾 儲存本日/本月班表精準微調修改", type="primary", key="man_save_btn"):
+        if st.button("💾 儲存下方表格手工個別微調", type="secondary", key="man_save_btn"):
             s_db = s_db[~mask_s]
             s_db = pd.concat([s_db, edited_s_df], ignore_index=True)
             st.session_state.schedule_db = s_db
             save_cloud_data(st.session_state.schedule_db, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
-            st.success("🎉 排班資料庫精準微調與雲端連動同步完成！")
+            st.success("🎉 手工個別微調已同步回雲端！")
             st.rerun()
 
 # ==========================================
-# 📊 5. 班表大印製中心 (🌟 修正點3：表格大字體放大 A4 滿版)
+# 📊 5. 班表大印製中心 (A4 滿版放大對齊版)
 # ==========================================
 elif "班表大印製中心" in page_clean:
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
@@ -465,7 +494,6 @@ elif "班表大印製中心" in page_clean:
         save_remarks(remarks_db)
         st.success("✅ 備註資料已成功儲存！")
     
-    # 🌟 修正點 3：大幅優化直式 A4 CSS 與字體級距，讓整張表格完美放大並填滿一張 A4
     html_table_rows = ""
     for r in edited_df.to_dict(orient='records'):
         is_weekend = r['星期'] in ["六", "日"]
