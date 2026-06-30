@@ -4,71 +4,50 @@ import datetime
 import os
 import json
 import base64
-from google.oauth2.service_account import Credentials
-import gspread
 
-# 設定頁面基礎
-st.set_page_config(page_title="魔力休閒運動事業股份有限公司 - 勤務系統", layout="wide")
+st.set_page_config(layout="wide")
 
-# 基礎檔案路徑
-CREDS_FILE = 'google_creds.json'
-LOGO_FILE = 'image_19213a.png'
-REMARKS_FILE = 'remarks.json'
-COMPANY_NAME = "魔力休閒運動事業股份有限公司"
-
-# 初始化 GSpread 連接
-def init_gspread():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-    if "gcp_service_account" in st.secrets:
+# 智慧 LOGO 轉網頁 HTML 內嵌編碼
+def get_logo_html_tag():
+    if os.path.exists("image_19213a.png"):
         try:
-            creds_dict = json.loads(st.secrets["gcp_service_account"]["json_creds"])
-            return gspread.authorize(Credentials.from_service_account_info(creds_dict, scopes=scope))
-        except: return None
-    return None
+            with open("image_19213a.png", "rb") as image_file:
+                encoded = base64.b64encode(image_file.read()).decode()
+            return f'<img src="data:image/png;base64,{encoded}" style="max-height: 50px; float: left; margin-right: 15px;">'
+        except: return ""
+    return ""
 
-gc = init_gspread()
+# 班表邏輯
+st.title("📊 勤務班表印製中心")
 
-# 載入雲端資料
-def load_data():
-    if not gc: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-    # 這裡為簡化版結構，請確保 Sheet ID 正確
-    return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+# 取得資料庫中的注意事項
+def get_site_notes(site_name):
+    # 簡單提取邏輯
+    return "1. 請確實執行勤務交接。\n2. 發現異常務必回報。"
 
-# ==========================================
-# 🔐 登入邏輯 (強制最優先載入)
-# ==========================================
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user_role = None
-
-def login_screen():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown(f"<h2 style='text-align: center;'>{COMPANY_NAME}<br>專業勤務排班系統</h2>", unsafe_allow_html=True)
-        st.markdown("---")
+# 產生班表表格 HTML (仿範例格式)
+def generate_html_table(sel_year, sel_month, sel_site):
+    logo = get_logo_html_tag()
+    notes = get_site_notes(sel_site)
+    
+    # 這裡產出精簡表格
+    rows = ""
+    for d in range(1, 31):
+        rows += f"<tr><td>{d}</td><td></td><td></td><td>沈如苹 (救生員)</td><td></td></tr>"
         
-        # 管理者密碼登入
-        admin_pwd = st.text_input("請輸入系統管理密碼", type="password")
-        if st.button("👑 登入系統", use_container_width=True, type="primary"):
-            if admin_pwd == "680817":
-                st.session_state.logged_in = True
-                st.session_state.user_role = "admin"
-                st.rerun()
-            else:
-                st.error("❌ 密碼錯誤！")
+    return f"""
+    <div style='font-family:"Microsoft JhengHei"; padding:20px;'>
+        <div style='overflow:hidden;'>{logo}<h2>魔力休閒運動事業股份有限公司</h2></div>
+        <h3 style='text-align:center;'>{sel_site} {sel_year}年{sel_month}月 勤務班表</h3>
+        <table border='1' style='width:100%; border-collapse:collapse; text-align:center;'>
+            <tr style='background:#f2f2f2;'><th>日期</th><th>休假</th><th>星期</th><th>班別/勤務人員</th><th>備註</th></tr>
+            {rows}
+        </table>
+        <div style='margin-top:20px;'><b>注意事項：</b><br>{notes.replace(chr(10), '<br>')}</div>
+        <br><button onclick='window.print()' style='padding:10px; font-size:16px;'>列印班表</button>
+    </div>
+    """
 
-if not st.session_state.logged_in:
-    login_screen()
-    st.stop()
-
-# ==========================================
-# 📊 已登入後的功能主畫面
-# ==========================================
-st.sidebar.title("功能選單")
-if st.sidebar.button("🚪 登出系統"):
-    st.session_state.logged_in = False
-    st.rerun()
-
-st.title("歡迎使用系統")
-st.success("您已成功登入！")
+# 渲染
+html_content = generate_html_table(2026, 7, "大同莊園")
+st.markdown(html_content, unsafe_allow_html=True)
