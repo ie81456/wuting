@@ -34,7 +34,7 @@ def get_logo_html_tag():
         try:
             with open(LOGO_FILE, "rb") as image_file:
                 encoded_string = base64.b64encode(image_file.read()).decode()
-            return f'<img src="data:image/png;base64,{encoded_string}" style="max-height: 55px; display: block; margin: 0 auto 5px auto;">'
+            return f'<img src="data:image/png;base64,{encoded_string}" style="max-height: 60px; display: block; margin: 0 auto 10px auto;">'
         except:
             return ""
     return ""
@@ -137,7 +137,7 @@ first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).r
 default_next_year = first_day_of_next_month.year
 default_next_month = first_day_of_next_month.month
 
-# 員工名冊依據「員工編號」由小到大精準排序
+# 員工名冊依據「員工編號」轉換、補零排序、產生格式化名單選單
 worker_options = []
 if not st.session_state.workers_db.empty:
     w_df = st.session_state.workers_db.copy()
@@ -197,14 +197,7 @@ if st.sidebar.button("🚪 安全登出系統", type="primary", use_container_wi
     st.session_state.logged_in = False
     st.rerun()
 
-def parse_single_shift_hours(t_in, t_out):
-    try:
-        td = datetime.datetime.strptime(str(t_out).strip(), '%H:%M') - datetime.datetime.strptime(str(t_in).strip(), '%H:%M')
-        hrs = float(td.total_seconds() / 3600.0)
-        return round(hrs + 24 if hrs < 0 else hrs, 1)
-    except: return 0.0
-
-# 基礎頁面分流
+# 各基本資料頁面
 if "工作者基本資料設定" in page_clean:
     st.title("⚙️ 工作者基本資料設定")
     st.dataframe(st.session_state.workers_db, use_container_width=True, hide_index=True)
@@ -219,7 +212,7 @@ elif "自動鋪底稿" in page_clean:
     st.dataframe(st.session_state.schedule_db, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 📊 正式印製中心 (橫式總班表 - 完美列印優化版)
+# 📊 正式印製中心 (橫式總班表)
 # ==========================================
 elif "班表大印製中心" in page_clean:
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
@@ -276,7 +269,7 @@ elif "班表大印製中心" in page_clean:
     for r in edited_df.to_dict(orient='records'):
         html_table_rows += f"""
         <tr>
-            <td style='text-align:center; padding:5px; border:1px solid #000;'>{r['日期']}</td>
+            <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['日期']}</td>
             <td style='padding:6px; border:1px solid #000; color:red;'>{r['休假']}</td>
             <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['星期']}</td>
             <td style='padding:6px; border:1px solid #000; font-weight:bold;'>{r['班別 / 勤務人員']}</td>
@@ -286,25 +279,18 @@ elif "班表大印製中心" in page_clean:
         
     logo_tag = get_logo_html_tag()
     full_html_document = f"""
-    <style>
-        @media print {{
-            body {{ background: #fff; color: #000; padding: 0; margin: 0; }}
-            .no-print {{ display: none !important; }}
-            #printArea {{ width: 100%; padding: 0 !important; }}
-        }}
-    </style>
-    <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:15px; background:#fff; color:#000;'>
+    <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:20px; background:#fff; color:#000;'>
         {logo_tag}
-        <h2 style='text-align:center; margin-bottom:3px; margin-top:5px; font-size:22px;'>{COMPANY_NAME}</h2>
-        <h3 style='text-align:center; margin-top:0; margin-bottom:15px; font-size:18px;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
-        <table style='width:100%; border-collapse:collapse; background:#fff; font-size:13px;'>
+        <h2 style='text-align:center; margin-bottom:5px; margin-top:5px;'>{COMPANY_NAME}</h2>
+        <h3 style='text-align:center; margin-top:0; margin-bottom:20px;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
+        <table style='width:100%; border-collapse:collapse; background:#fff;'>
             <thead>
                 <tr style='background-color:#f2f2f2;'>
-                    <th style='width:6%; border:1px solid #000; padding:6px;'>日期</th>
-                    <th style='width:22%; border:1px solid #000; padding:6px;'>休假</th>
-                    <th style='width:6%; border:1px solid #000; padding:6px;'>星期</th>
-                    <th style='width:46%; border:1px solid #000; padding:6px;'>班別 / 勤務人員</th>
-                    <th style='width:20%; border:1px solid #000; padding:6px;'>備註</th>
+                    <th style='width:6%; border:1px solid #000; padding:8px;'>日期</th>
+                    <th style='width:22%; border:1px solid #000; padding:8px;'>休假</th>
+                    <th style='width:6%; border:1px solid #000; padding:8px;'>星期</th>
+                    <th style='width:46%; border:1px solid #000; padding:8px;'>班別 / 勤務人員</th>
+                    <th style='width:20%; border:1px solid #000; padding:8px;'>備註</th>
                 </tr>
             </thead>
             <tbody>
@@ -312,16 +298,16 @@ elif "班表大印製中心" in page_clean:
             </tbody>
         </table>
     </div>
-    <div class='no-print' style='text-align:center; margin-top:15px;'>
-        <button onclick='window.print();' style='padding:12px 35px; font-size:16px; font-weight:bold; background-color:#1E88E5; color:white; border:none; border-radius:5px; cursor:pointer; boxShadow: 0px 2px 5px rgba(0,0,0,0.2);'>🖨️ 點擊啟動 PDF 列印與儲存中心 (自動隱藏周邊元件)</button>
+    <div style='text-align:center; margin-top:20px;'>
+        <button onclick='window.print();' style='padding:12px 30px; font-size:16px; font-weight:bold; background-color:#1E88E5; color:white; border:none; border-radius:5px; cursor:pointer;'>🖨️ 點擊啟動 PDF 列印與儲存中心</button>
     </div>
     """
     st.markdown("---")
-    st.subheader("📋 橫式班表範例級預覽")
+    st.subheader("📋 預覽正式發佈班表 (下方按鈕可直接另存為 PDF)")
     st.components.v1.html(full_html_document, height=650, scrolling=True)
 
 # ==========================================
-# 📱 員工個人出勤直式查詢 (一天一列、內嵌 LOGO、全面隱藏雜質)
+# 📱 員工個人出勤直式查詢 (一天一列合併優化版)
 # ==========================================
 elif "個人班表出勤直式查詢" in page_clean:
     st.title("📱 員工個人出勤班表直式查詢與 PDF 產出")
@@ -348,11 +334,13 @@ elif "個人班表出勤直式查詢" in page_clean:
         if not emp_records.empty:
             sorted_records = emp_records[['日期', '案場名稱', '班段名稱', '時段區間', '派駐職位']].sort_values(by='日期').reset_index(drop=True)
             
+            # 🌟【核心升級：一天一列智慧合併引擎】按日期與案場將多個時段抽離合併
             grouped_rows_html = ""
+            # 用於網頁預覽呈現的聚合 DataList
             preview_list = []
             
-            # 🌟 依日期案場分組合併，達成同一格內多時段換行呈現效果
             for (date_val, site_val), group in sorted_records.groupby(['日期', '案場名稱']):
+                # 將多個時段與區間用換行符號 <br> 連接
                 shifts_combined = "<br>".join(group['班段名稱'].tolist())
                 intervals_combined = "<br>".join(group['時段區間'].tolist())
                 roles_combined = "<br>".join(list(set(group['派駐職位'].tolist())))
@@ -367,38 +355,33 @@ elif "個人班表出勤直式查詢" in page_clean:
                 
                 grouped_rows_html += f"""
                 <tr>
-                    <td style='text-align:center; padding:8px; border:1px solid #000; vertical-align:middle;'>{date_val}</td>
-                    <td style='padding:8px; border:1px solid #000; vertical-align:middle;'>{site_val}</td>
-                    <td style='text-align:center; padding:8px; border:1px solid #000; vertical-align:middle;'>{shifts_combined}</td>
-                    <td style='text-align:center; padding:8px; border:1px solid #000; vertical-align:middle;'>{intervals_combined}</td>
-                    <td style='padding:8px; border:1px solid #000; font-weight:bold; vertical-align:middle;'>{roles_combined}</td>
+                    <td style='text-align:center; padding:10px; border:1px solid #000; vertical-align:middle;'>{date_val}</td>
+                    <td style='padding:10px; border:1px solid #000; vertical-align:middle;'>{site_val}</td>
+                    <td style='text-align:center; padding:10px; border:1px solid #000; vertical-align:middle;'>{shifts_combined}</td>
+                    <td style='text-align:center; padding:10px; border:1px solid #000; vertical-align:middle;'>{intervals_combined}</td>
+                    <td style='padding:10px; border:1px solid #000; font-weight:bold; vertical-align:middle;'>{roles_combined}</td>
                 </tr>
                 """
             
-            st.success(f"📋 已優化【{target_emp}】當月直式班表為『一天一列』明細：")
+            # 呈現精簡後的一天一列資料網格給同仁看
+            st.success(f"📋 已成功將【{target_emp}】當月排班精簡優化為「一天一列」明細：")
             st.dataframe(pd.DataFrame(preview_list), use_container_width=True, hide_index=True)
             
+            # 🌟 內嵌 LOGO 商標與一天一列完美合併的 PDF 高階列印架構
             logo_tag = get_logo_html_tag()
             emp_html_doc = f"""
-            <style>
-                @media print {{
-                    body {{ background: #fff; color: #000; padding: 0; margin: 0; }}
-                    .no-print {{ display: none !important; }}
-                    #printArea {{ width: 100%; padding: 0 !important; }}
-                }}
-            </style>
-            <div id='printArea' style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:15px; background:#fff; color:#000;'>
+            <div style='font-family:"Microsoft JhengHei", "Arial", sans-serif; padding:15px; background:#fff; color:#000;'>
                 {logo_tag}
-                <h3 style='text-align:center; margin-bottom:3px; margin-top:5px; font-size:20px;'>{COMPANY_NAME}</h3>
-                <h4 style='text-align:center; margin-top:0; margin-bottom:15px; font-size:16px;'>同仁【{target_emp}】{q_year}年{q_month:02d}月份 個人出勤直式明細表</h4>
-                <table style='width:100%; border-collapse:collapse; background:#fff; font-size:13px;'>
+                <h3 style='text-align:center; margin-bottom:5px; margin-top:5px;'>{COMPANY_NAME}</h3>
+                <h4 style='text-align:center; margin-top:0; margin-bottom:15px;'>同仁【{target_emp}】{q_year}年{q_month:02d}月份 個人出勤直式明細表</h4>
+                <table style='width:100%; border-collapse:collapse; background:#fff;'>
                     <thead>
                         <tr style='background-color:#f5f5f5;'>
-                            <th style='border:1px solid #000; padding:8px; width:15%;'>出勤日期</th>
-                            <th style='border:1px solid #000; padding:8px; width:25%;'>指派案場</th>
-                            <th style='border:1px solid #000; padding:8px; width:20%;'>班段</th>
-                            <th style='border:1px solid #000; padding:8px; width:25%;'>時間區間</th>
-                            <th style='border:1px solid #000; padding:8px; width:15%;'>擔任職位</th>
+                            <th style='border:1px solid #000; padding:10px; width:15%;'>出勤日期</th>
+                            <th style='border:1px solid #000; padding:10px; width:25%;'>指派案場</th>
+                            <th style='border:1px solid #000; padding:10px; width:20%;'>班段</th>
+                            <th style='border:1px solid #000; padding:10px; width:25%;'>時間區間</th>
+                            <th style='border:1px solid #000; padding:10px; width:15%;'>擔任職位</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -406,12 +389,17 @@ elif "個人班表出勤直式查詢" in page_clean:
                     </tbody>
                 </table>
             </div>
-            <div class='no-print' style='text-align:center; margin-top:15px;'>
-                <button onclick='window.print();' style='padding:10px 30px; font-size:14px; font-weight:bold; background-color:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer; boxShadow: 0px 2px 4px rgba(0,0,0,0.15);'>🖨️ 導出/列印個人直式班表 PDF (自動隱藏雜質)</button>
+            <div style='text-align:center; margin-top:15px;'>
+                <button onclick='window.print();' style='padding:10px 25px; font-size:14px; font-weight:bold; background-color:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer;'>🖨️ 導出/列印個人直式班表 PDF</button>
             </div>
             """
             st.markdown("---")
-            st.subheader("📄 直式班表範例級列印預覽")
+            st.subheader("📄 直式班表 PDF 印製與導出預覽區 (內含公司 LOGO Mark)")
             st.components.v1.html(emp_html_doc, height=520, scrolling=True)
         else:
-            st.info(f"ℹ nighttime: 雲端資料庫中目前尚無【{target_emp}】在 {q_year} 年 {q_month} 月的出勤記錄。")
+            st.info(f"ℹ️ 雲端資料庫中目前尚無【{target_emp}】在 {q_year} 年 {q_month} 月的出勤記錄。")
+    else:
+        st.warning("⚠️ 排班資料庫為空。")
+
+else:
+    st.title("🔐 員工線上密碼變更自主中心")
