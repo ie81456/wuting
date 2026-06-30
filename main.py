@@ -36,7 +36,7 @@ def get_logo_html_tag():
         try:
             with open(LOGO_FILE, "rb") as image_file:
                 encoded = base64.b64encode(image_file.read()).decode()
-            return f'<img src="data:image/png;base64,{encoded}" style="max-height: 55px;">'
+            return f'<img src="data:image/png;base64,{encoded}" style="max-height: 60px;">'
         except: return ""
     return ""
 
@@ -120,9 +120,6 @@ if 'data_loaded' not in st.session_state:
         st.session_state.site_types = ["辦公大樓", "購物中心", "展覽館", "工廠園區", "其他"]
         st.session_state.data_loaded = True
 
-if 'w_clear_key' not in st.session_state: st.session_state.w_clear_key = 0
-if 's_clear_key' not in st.session_state: st.session_state.s_clear_key = 0
-
 today = datetime.date.today()
 first_day_of_next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
 default_next_year = first_day_of_next_month.year
@@ -174,7 +171,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ==========================================
-# 📍 系統選單
+# 📍 系統選單切換
 # ==========================================
 is_admin = (st.session_state.user_role == "admin")
 if is_admin:
@@ -202,22 +199,21 @@ if "員工基本資料設定" in page_clean:
     with col_left:
         with st.form("worker_add_form"):
             st.subheader("➕ 新增員工資料")
-            k = st.session_state.w_clear_key
-            emp_id = st.text_input("員工編號", key=f"w_id_{k}")
-            name = st.text_input("姓名", key=f"w_name_{k}")
-            mobile_phone = st.text_input("行動電話", key=f"w_mob_{k}")
-            home_phone = st.text_input("住家電話", key=f"w_home_{k}")
-            address = st.text_input("通訊地址", key=f"w_addr_{k}")
+            emp_id = st.text_input("員工編號")
+            name = st.text_input("姓名")
+            mobile_phone = st.text_input("行動電話")
+            home_phone = st.text_input("住家電話")
+            address = st.text_input("通訊地址")
             available_sites = st.session_state.sites_db['案場名稱'].tolist() if not st.session_state.sites_db.empty else []
-            assigned_sites = st.multiselect("支持/派駐案場 (可複選)", options=available_sites, key=f"w_sites_{k}")
-            new_pwd = st.text_input("設定登入密碼 (留空則預設為行動電話)", key=f"w_pwd_{k}")
+            assigned_sites = st.multiselect("支持/派駐案場 (可複選)", options=available_sites)
+            new_pwd = st.text_input("設定登入密碼 (留空則預設為行動電話)", type="password")
             if st.form_submit_button("確認新增員工") and emp_id and name:
                 sites_str = ", ".join(assigned_sites) if assigned_sites else "未指定"
                 pwd_final = new_pwd.strip() if new_pwd.strip() else mobile_phone.strip()
                 new_worker = pd.DataFrame([{'員工編號': emp_id, '姓名': name.strip(), '行動電話': mobile_phone.strip(), '住家電話': home_phone, '通訊地址': address, '派駐案場': sites_str, '登入密碼': pwd_final}])
                 st.session_state.workers_db = pd.concat([st.session_state.workers_db, new_worker], ignore_index=True)
                 save_cloud_data(st.session_state.workers_db, 'workers', ['員工編號', '姓名', '行動電話', '住家電話', '通訊地址', '派駐案場', '登入密碼'])
-                st.session_state.w_clear_key += 1
+                st.success("員工新增成功！")
                 st.rerun()
     with col_right:
         st.subheader("🛠️ 修改 / 🗑️ 刪除員工")
@@ -252,17 +248,16 @@ elif "案場基本資料設定" in page_clean:
     col_left, col_right = st.columns(2)
     with col_left:
         with st.form("site_add_form"):
-            sk = st.session_state.s_clear_key
             st.subheader("➕ 新增案場資料")
-            site_name = st.text_input("案場名稱", key=f"s_name_{sk}")
-            site_addr = st.text_input("案場地址", key=f"s_addr_{sk}")
-            site_type = st.selectbox("案場性質", st.session_state.site_types, key=f"s_type_{sk}")
-            notes = st.text_area("填表說明/注意事項 (將呈現在PDF最下方)", key=f"s_note_{sk}")
+            site_name = st.text_input("案場名稱")
+            site_addr = st.text_input("案場地址")
+            site_type = st.selectbox("案場性質", st.session_state.site_types)
+            notes = st.text_area("填表說明/注意事項 (將呈現在PDF最下方)")
             if st.form_submit_button("確認新增案場") and site_name:
                 new_site = pd.DataFrame([{'案場名稱': site_name.strip(), '案場地址': site_addr, '案場性質': site_type, '案場聯絡人姓名': '', '案場聯絡人電話': '', '時段一_上': '', '時段一_下': '', '時段二_上': '', '時段二_下': '', '時段三_上': '', '時段三_下': '', '注意事項': notes}])
                 st.session_state.sites_db = pd.concat([st.session_state.sites_db, new_site], ignore_index=True)
                 save_cloud_data(st.session_state.sites_db, 'sites', ['案場名稱', '案場地址', '案場性質', '案場聯絡人姓名', '案場聯絡人電話', '時段一_上', '時段一_下', '時段二_上', '時段二_下', '時段三_上', '時段三_下', '注意事項'])
-                st.session_state.s_clear_key += 1
+                st.success("案場新增成功！")
                 st.rerun()
     with col_right:
         st.subheader("🛠️ 修改 / 🗑️ 刪除案場")
@@ -287,17 +282,21 @@ elif "案場基本資料設定" in page_clean:
     st.dataframe(st.session_state.sites_db, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 🗓️ 3. 線上填報排休與手工修改 (🌟 優化過濾連動)
+# 🗓️ 3. 線上填報排休與手工修改 (🌟 完美即時連動修正)
 # ==========================================
 elif "線上填報排休" in page_clean:
     st.title("🗓️ 線上填報排休與手工修改")
+    
+    # 🌟 修正點 1：將選擇案場與日期的控制項移至表單外部，確保每次變動時右側表格能 100% 觸發完全即時連動過濾
     col_entry, col_view = st.columns([1, 1.5])
+    
     with col_entry:
         st.subheader("✍️ 填報排休登記")
-        with st.form("leave_submit_form"):
-            select_worker = st.selectbox("1. 選擇同仁姓名：", st.session_state.workers_db['姓名'].tolist()) if is_admin else st.session_state.current_user_name
-            select_site = st.selectbox("2. 選擇排休案場：", st.session_state.sites_db['案場名稱'].tolist() if not st.session_state.sites_db.empty else ["大同莊園"])
-            select_date = st.date_input("3. 選擇排休日期：", today)
+        select_site = st.selectbox("1. 選擇排休案場：", st.session_state.sites_db['案場名稱'].tolist() if not st.session_state.sites_db.empty else ["大同莊園"])
+        select_date = st.date_input("2. 選擇排休日期：", today)
+        
+        with st.form("leave_submit_inner_form"):
+            select_worker = st.selectbox("3. 選擇同仁姓名：", st.session_state.workers_db['姓名'].tolist()) if is_admin else st.session_state.current_user_name
             select_leave_shift = st.selectbox("4. 選擇假別時段：", ["全天班", "時段一", "時段二", "時段三"])
             select_type = st.radio("5. 假別性質：", ["特休", "一般排休"])
             if st.form_submit_button("確認送出排休"):
@@ -307,26 +306,28 @@ elif "線上填報排休" in page_clean:
                 save_cloud_data(st.session_state.leave_requests_db, 'leave_requests', ['日期', '案場名稱', '員工姓名', '請假時段', '假別性質'])
                 st.success("排休新增成功！")
                 st.rerun()
+                
     with col_view:
-        # 🌟 修正點 2：右側表格不再需要選擇月份，而是強制精準對齊左側表單選取的特定年份與月份！
+        # 🌟 完美同步：右側表格強制跟隨左側案場及點選的日期月份，毫無秒差即時連動過濾
         target_ym = select_date.strftime('%Y-%m')
-        st.subheader(f"📋 【{select_site}】{target_ym} 月份排休連動清單")
+        st.subheader(f"📋 【{select_site}】{target_ym} 月份排休即時清單")
         st.write("💡 提示：雙擊儲存格直接修改，勾選最左側可進行整列增刪，完成後請按「儲存排休表單修改」。")
+        
         l_db = st.session_state.leave_requests_db.copy()
-        mask = (l_db['日期'].str.startswith(target_ym)) & (l_db['案場名稱'] == select_site)
+        mask = (l_db['日期'].str.startswith(target_ym)) & (l_db['案場名稱'].str.strip() == select_site.strip())
         filtered_l_db = l_db[mask]
         
-        edited_l_df = st.data_editor(filtered_l_db, num_rows="dynamic", use_container_width=True, hide_index=True)
+        edited_l_df = st.data_editor(filtered_l_db, num_rows="dynamic", use_container_width=True, hide_index=True, key="leave_data_editor")
         if st.button("💾 儲存排休表單修改", type="primary"):
             l_db = l_db[~mask]
             l_db = pd.concat([l_db, edited_l_df], ignore_index=True)
             st.session_state.leave_requests_db = l_db
             save_cloud_data(st.session_state.leave_requests_db, 'leave_requests', ['日期', '案場名稱', '員工姓名', '請假時段', '假別性質'])
-            st.success("🎉 排休表單與雲端同步更新成功！")
+            st.success("🎉 排休表單已完美與雲端完成連動同步！")
             st.rerun()
 
 # ==========================================
-# 🚀 4. 自動週期底稿鋪設與修改 (🌟 滑鼠點選優化)
+# 🚀 4. 自動週期底稿鋪設與修改 (🌟 下拉選單滑鼠點選防呆)
 # ==========================================
 elif "自動週期底稿鋪設" in page_clean:
     st.title("🚀 自動週期底稿鋪設與排班微調控制台")
@@ -391,9 +392,9 @@ elif "自動週期底稿鋪設" in page_clean:
                 st.rerun()
 
     with tab_manual:
-        # 🌟 修正點 1 & 5：手工微調控制台全面改為「滑鼠下拉點選年份/月份」，且全面放開「新增、修改、刪除」功能
-        st.subheader("🛠 nighttime 班表特定月份精準手工修改與微調")
-        st.write("請使用滑鼠下拉選擇案場與指定年月，下方表格支援連點兩下修改，或在最下方 ➕ 新增列，或點擊最左側行號按 Delete 刪除列。")
+        # 🌟 修正點 2：手工微調模組完全改成滑鼠點選（年份下拉選單 + 月份下拉選單），完全杜絕打錯字
+        st.subheader("🛠️ 班表特定月份精準手工修改與微調")
+        st.write("說明：請使用滑鼠點選案場、年份及月份，下方表格支援連點兩下直接修改，或按表格下方 ➕ 新增列，或點擊最左側整列按 Delete 刪除。")
         col_q1, col_q2, col_q3 = st.columns(3)
         with col_q1: q_site = st.selectbox("指定微調案場：", st.session_state.sites_db['案場名稱'].tolist() if not st.session_state.sites_db.empty else ["大同莊園"], key="man_site")
         with col_q2: q_year = st.selectbox("指定微調年份：", [2026, 2027], index=0, key="man_year")
@@ -401,20 +402,20 @@ elif "自動週期底稿鋪設" in page_clean:
         
         target_q_ym = f"{q_year}-{q_month:02d}"
         s_db = st.session_state.schedule_db.copy()
-        mask_s = (s_db['日期'].str.startswith(target_q_ym)) & (s_db['案場名稱'] == q_site)
+        mask_s = (s_db['日期'].str.startswith(target_q_ym)) & (s_db['案場名稱'].str.strip() == q_site.strip())
         filtered_s_df = s_db[mask_s]
         
-        edited_s_df = st.data_editor(filtered_s_df, num_rows="dynamic", use_container_width=True, hide_index=True)
+        edited_s_df = st.data_editor(filtered_s_df, num_rows="dynamic", use_container_width=True, hide_index=True, key="manual_schedule_editor")
         if st.button("💾 儲存本日/本月班表精準微調修改", type="primary", key="man_save_btn"):
             s_db = s_db[~mask_s]
             s_db = pd.concat([s_db, edited_s_df], ignore_index=True)
             st.session_state.schedule_db = s_db
             save_cloud_data(st.session_state.schedule_db, 'schedule', ['日期', '案場名稱', '員工姓名', '班段名稱', '時段區間', '時源工時', '派駐職位'])
-            st.success("🎉 排班資料庫底稿精準微調與雲端連動同步完成！")
+            st.success("🎉 排班資料庫精準微調與雲端連動同步完成！")
             st.rerun()
 
 # ==========================================
-# 📊 5. 班表大印製中心 (🌟 修正點3：週六日加紅字、漂亮滿版)
+# 📊 5. 班表大印製中心 (🌟 修正點3：表格大字體放大 A4 滿版)
 # ==========================================
 elif "班表大印製中心" in page_clean:
     st.title("📊 勤務班表 PDF 印製與備註輸入中心")
@@ -464,20 +465,20 @@ elif "班表大印製中心" in page_clean:
         save_remarks(remarks_db)
         st.success("✅ 備註資料已成功儲存！")
     
-    # 🌟 修正點 3 & 6：生成高密度的純淨直式 A4 HTML
+    # 🌟 修正點 3：大幅優化直式 A4 CSS 與字體級距，讓整張表格完美放大並填滿一張 A4
     html_table_rows = ""
     for r in edited_df.to_dict(orient='records'):
         is_weekend = r['星期'] in ["六", "日"]
-        row_style = "style='color:red; font-weight:bold;'" if is_weekend else ""
-        leave_cell = f"<td style='padding:5px; border:1px solid #000; color:red; font-weight:bold;'>{r['休假']}</td>" if r['休假'] else "<td style='padding:5px; border:1px solid #000;'></td>"
+        row_style = "style='color:red; font-weight:bold; font-size:16px;'" if is_weekend else "style='font-size:16px;'"
+        leave_cell = f"<td style='padding:6px; border:1px solid #000; color:red; font-weight:bold; font-size:16px;'>{r['休假']}</td>" if r['休假'] else "<td style='padding:6px; border:1px solid #000;'></td>"
         
         html_table_rows += f"""
         <tr {row_style}>
-            <td style='text-align:center; padding:5px; border:1px solid #000;'>{r['日期']}</td>
+            <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['日期']}</td>
             {leave_cell}
-            <td style='text-align:center; padding:5px; border:1px solid #000;'>{r['星期']}</td>
-            <td style='padding:5px; border:1px solid #000; font-weight:bold;'>{r['班別 / 勤務人員']}</td>
-            <td style='padding:5px; border:1px solid #000; color:#000; font-weight:normal;'>{r['備註']}</td>
+            <td style='text-align:center; padding:6px; border:1px solid #000;'>{r['星期']}</td>
+            <td style='padding:6px; border:1px solid #000; font-weight:bold; font-size:17px;'>{r['班別 / 勤務人員']}</td>
+            <td style='padding:6px; border:1px solid #000; color:#000; font-weight:normal; font-size:15px;'>{r['備註']}</td>
         </tr>
         """
         
@@ -485,8 +486,8 @@ elif "班表大印製中心" in page_clean:
     s_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'] == sel_site.strip()]
     if not s_rows.empty and s_rows.iloc[0]['注意事項']:
         notes_lines = str(s_rows.iloc[0]['注意事項']).split('\n')
-        site_notes_html += "<div style='margin-top:15px; font-size:14px; line-height:1.5; color:#000; text-align:left;'>"
-        site_notes_html += "<b>填表說明/注意事項:</b><br>"
+        site_notes_html += "<div style='margin-top:20px; font-size:15px; line-height:1.6; color:#000; text-align:left;'>"
+        site_notes_html += "<b style='font-size:16px;'>填表說明/注意事項:</b><br>"
         for line in notes_lines:
             if line.strip():
                 if any(k in line for k in ["特別注意", "重要", "嚴禁", "請先閱讀"]):
@@ -501,27 +502,27 @@ elif "班表大印製中心" in page_clean:
     <html>
     <head>
     <style>
-        body {{ font-family: "Microsoft JhengHei", sans-serif; background: #fff; color: #000; margin: 0; padding: 0; }}
+        body {{ font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; background: #fff; color: #000; margin: 0; padding: 0; }}
         @media print {{
             body {{ padding: 0; margin: 0; }}
             .no-print {{ display: none !important; }}
             #printArea {{ width: 100%; padding: 0 !important; }}
-            @page {{ size: A4 portrait; margin: 10mm; }}
+            @page {{ size: A4 portrait; margin: 8mm 10mm 8mm 10mm; }}
         }}
     </style>
     </head>
     <body>
-    <div id='printArea' style='padding:10px; width:100%; box-sizing:border-box;'>
-        <div style='display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 15px;'>
+    <div id='printArea' style='padding:5px; width:100%; box-sizing:border-box;'>
+        <div style='display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 18px;'>
             <div style='position: absolute; left: 0;'>{logo_tag}</div>
             <div style='text-align: center;'>
-                <h2 style='margin: 0; font-size: 24px; font-weight: bold;'>{COMPANY_NAME}</h2>
-                <h3 style='margin: 5px 0 0 0; font-size: 18px; color: #333;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
+                <h2 style='margin: 0; font-size: 26px; font-weight: bold;'>{COMPANY_NAME}</h2>
+                <h3 style='margin: 6px 0 0 0; font-size: 19px; color: #111; font-weight: bold;'>{sel_site} {sel_year}年{sel_month:02d}月份 勤務班表</h3>
             </div>
         </div>
-        <table style='width:100%; border-collapse:collapse; font-size:14px; color:#000;'>
+        <table style='width:100%; border-collapse:collapse; color:#000; font-size:16px;'>
             <thead>
-                <tr style='background-color:#f2f2f2; text-align:center; color:#000;'>
+                <tr style='background-color:#eaeaea; text-align:center; color:#000; font-weight:bold; height:40px;'>
                     <th style='width:8%; border:1px solid #000; padding:8px;'>日期</th>
                     <th style='width:22%; border:1px solid #000; padding:8px; color:red;'>休假</th>
                     <th style='width:8%; border:1px solid #000; padding:8px;'>星期</th>
@@ -533,17 +534,17 @@ elif "班表大印製中心" in page_clean:
         </table>
         {site_notes_html}
         <div class='no-print' style='text-align:center; margin-top:20px;'>
-            <button onclick='window.print()' style='padding:12px 35px; font-size:16px; font-weight:bold; background-color:#1E88E5; color:white; border:none; border-radius:5px; cursor:pointer;'>🖨️ 點擊列印 A4 直式正式班表</button>
+            <button onclick='window.print()' style='padding:14px 40px; font-size:17px; font-weight:bold; background-color:#1E88E5; color:white; border:none; border-radius:5px; cursor:pointer;'>🖨️ 點擊啟用 A4 滿版放大列印中心</button>
         </div>
     </div>
     </body>
     </html>
     """
     st.markdown("---")
-    components.html(full_html, height=850, scrolling=True)
+    components.html(full_html, height=900, scrolling=True)
 
 # ==========================================
-# 📱 6. 個人班表出勤直式查詢 (🌟 修正點 4：補回注意事項)
+# 📱 6. 個人班表出勤直式查詢
 # ==========================================
 elif "個人班表出勤直式查詢" in page_clean:
     st.title("📱 員工個人出勤班表直式查詢與 A4 列印")
@@ -567,7 +568,6 @@ elif "個人班表出勤直式查詢" in page_clean:
             sorted_records = emp_records[['日期', '案場名稱', '班段名稱', '時段區間', '派駐職位']].sort_values(by='日期').reset_index(drop=True)
             st.dataframe(sorted_records, use_container_width=True, hide_index=True)
             
-            # 取得該同仁當月主要案場的注意事項
             main_site_name = sorted_records.iloc[0]['案場名稱']
             site_notes_html = ""
             s_rows = st.session_state.sites_db[st.session_state.sites_db['案場名稱'] == main_site_name.strip()]
